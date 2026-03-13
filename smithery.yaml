@@ -1,0 +1,18 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      BIGDATACLOUD_API_KEY:
+        type: string
+        description: "Your BigDataCloud API key. Get a free key at https://www.bigdatacloud.com/login"
+    required:
+      - BIGDATACLOUD_API_KEY
+  commandFunction: |-
+    (config) => ({
+      command: 'node',
+      args: ['dist/index.js'],
+      env: {
+        BIGDATACLOUD_API_KEY: config.BIGDATACLOUD_API_KEY
+      }
+    })
