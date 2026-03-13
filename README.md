@@ -68,7 +68,7 @@ Add to your VS Code settings or `.vscode/mcp.json`:
 
 **Free tier available** — most tools work with a free API key:
 
-1. Sign up at [bigdatacloud.com/free-api](https://www.bigdatacloud.com/free-api)
+1. Sign up at [bigdatacloud.com/login](https://www.bigdatacloud.com/login)
 2. Get your API key from the dashboard
 3. Set the `BIGDATACLOUD_API_KEY` environment variable
 

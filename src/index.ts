@@ -29,9 +29,9 @@ async function callApi({ endpoint, params, requiresKey }: ApiCallOptions): Promi
       error: "API key required",
       message:
         "This endpoint requires a BigDataCloud API key. " +
-        "Get a free key at https://www.bigdatacloud.com/free-api — " +
+        "Get a free key at https://www.bigdatacloud.com/login — " +
         "then set the BIGDATACLOUD_API_KEY environment variable.",
-      signUpUrl: "https://www.bigdatacloud.com/free-api",
+      signUpUrl: "https://www.bigdatacloud.com/login",
     });
   }
 
