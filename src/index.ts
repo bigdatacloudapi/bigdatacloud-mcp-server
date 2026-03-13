@@ -81,28 +81,7 @@ const server = new McpServer({
 });
 
 // ========================
-// FREE TOOLS (no key)
-// ========================
-
-server.tool(
-  "reverse-geocode-client",
-  "Translate GPS coordinates into a human-readable address (locality, city, country). Free, no API key required.",
-  {
-    latitude: z.number().min(-90).max(90).describe("Latitude (-90 to 90)"),
-    longitude: z.number().min(-180).max(180).describe("Longitude (-180 to 180)"),
-    localityLanguage: z.string().optional().describe("Language for results (e.g. 'en', 'de', 'ja'). Default: en"),
-  },
-  async ({ latitude, longitude, localityLanguage }) => {
-    const text = await callApi({
-      endpoint: "reverse-geocode-client",
-      params: { latitude, longitude, localityLanguage },
-    });
-    return ok(text);
-  }
-);
-
-// ========================
-// API KEY TOOLS — IP Geolocation
+// IP Geolocation
 // ========================
 
 server.tool(

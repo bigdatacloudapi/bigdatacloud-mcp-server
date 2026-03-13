@@ -72,17 +72,11 @@ Add to your VS Code settings or `.vscode/mcp.json`:
 2. Get your API key from the dashboard
 3. Set the `BIGDATACLOUD_API_KEY` environment variable
 
-The `reverse-geocode-client` tool works without any API key for basic coordinate lookups.
+All tools require an API key. The free tier gives you access to every endpoint with generous volume limits.
 
 ## Available Tools
 
-### 🆓 Free (no API key needed)
-
-| Tool | Description |
-|------|-------------|
-| `reverse-geocode-client` | GPS coordinates → address (locality, city, country) |
-
-### 🔑 All API Tools (free API key — all endpoints, volume-limited)
+### All Tools (free API key — all endpoints, volume-limited)
 
 | Tool | Description |
 |------|-------------|
