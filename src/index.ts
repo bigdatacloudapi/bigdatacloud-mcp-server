@@ -8,7 +8,7 @@ import { z } from "zod";
 // Configuration
 // ---------------------------------------------------------------------------
 
-const API_BASE = "https://api.bigdatacloud.net/data";
+const API_BASE = "https://api-bdc.net/data";
 const API_KEY = process.env.BIGDATACLOUD_API_KEY || "";
 
 const PACKAGE_VERSION = "1.0.0";
