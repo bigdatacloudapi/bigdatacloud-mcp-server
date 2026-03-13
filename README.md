@@ -76,17 +76,19 @@ The `reverse-geocode-client` tool works without any API key for basic coordinate
 
 ## Available Tools
 
-### 🆓 Free (no API key)
+### 🆓 Free (no API key needed)
 
 | Tool | Description |
 |------|-------------|
 | `reverse-geocode-client` | GPS coordinates → address (locality, city, country) |
 
-### 🔑 Free API Key
+### 🔑 All API Tools (free API key — all endpoints, volume-limited)
 
 | Tool | Description |
 |------|-------------|
 | `ip-geolocation` | IP address → city, region, country, coordinates, ISP |
+| `ip-geolocation-full` | Full geolocation + confidence area + hazard report |
+| `ip-geolocation-with-confidence` | Geolocation + confidence score + area boundary |
 | `reverse-geocode` | Coordinates → detailed address information |
 | `reverse-geocode-with-timezone` | Coordinates → address + timezone details |
 | `asn-info` | AS number → organisation, country, prefixes |
@@ -97,15 +99,10 @@ The `reverse-geocode-client` tool works without any API key for basic coordinate
 | `phone-number-validate` | Phone number → country, carrier, line type |
 | `email-verify` | Email → format check, domain, MX, disposable status |
 | `user-agent-info` | UA string → browser, OS, device, bot detection |
+| `ip-hazard-report` | VPN, proxy, Tor, bot, spam threat assessment |
 | `tor-exit-nodes` | List active Tor exit nodes with geolocation |
 
-### 💎 Premium
-
-| Tool | Description |
-|------|-------------|
-| `ip-geolocation-full` | Full geolocation + confidence + hazard report |
-| `ip-geolocation-with-confidence` | Geolocation + confidence score + area boundary |
-| `ip-hazard-report` | VPN, proxy, Tor, bot, spam threat assessment |
+Need more volume? [Upgrade your plan](https://www.bigdatacloud.com/api-packages).
 
 ## Example Prompts
 
