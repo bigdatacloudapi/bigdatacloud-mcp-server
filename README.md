@@ -17,7 +17,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "bigdatacloud": {
       "command": "npx",
-      "args": ["-y", "@bigdatacloud/mcp-server"],
+      "args": ["-y", "@bigdatacloudapi/mcp-server"],
       "env": {
         "BIGDATACLOUD_API_KEY": "your-api-key-here"
       }
@@ -35,7 +35,7 @@ Add to `.cursor/mcp.json` in your project:
   "mcpServers": {
     "bigdatacloud": {
       "command": "npx",
-      "args": ["-y", "@bigdatacloud/mcp-server"],
+      "args": ["-y", "@bigdatacloudapi/mcp-server"],
       "env": {
         "BIGDATACLOUD_API_KEY": "your-api-key-here"
       }
@@ -54,7 +54,7 @@ Add to your VS Code settings or `.vscode/mcp.json`:
     "servers": {
       "bigdatacloud": {
         "command": "npx",
-        "args": ["-y", "@bigdatacloud/mcp-server"],
+        "args": ["-y", "@bigdatacloudapi/mcp-server"],
         "env": {
           "BIGDATACLOUD_API_KEY": "your-api-key-here"
         }
