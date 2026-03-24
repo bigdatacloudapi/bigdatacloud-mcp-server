@@ -1,5 +1,8 @@
 # BigDataCloud MCP Server
 
+[![bigdatacloudapi/bigdatacloud-mcp-server MCP server](https://glama.ai/mcp/servers/bigdatacloudapi/bigdatacloud-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/bigdatacloudapi/bigdatacloud-mcp-server)
+
+
 An [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server that gives AI assistants access to [BigDataCloud](https://www.bigdatacloud.com) APIs — IP geolocation, reverse geocoding, network intelligence, timezone, phone/email validation and more.
 
 ## Why?
