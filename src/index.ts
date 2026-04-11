@@ -11,7 +11,7 @@ import { z } from "zod";
 const API_BASE = "https://api-bdc.net/data";
 const API_KEY = process.env.BIGDATACLOUD_API_KEY || "";
 
-const PACKAGE_VERSION = "1.0.0";
+const PACKAGE_VERSION = "1.1.0";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -361,6 +361,163 @@ server.tool(
       params: { batchSize, offset, localityLanguage },
       requiresKey: true,
     });
+    return ok(text);
+  }
+);
+
+// ========================
+// IP Geolocation — additional
+// ========================
+
+server.tool(
+  "country-info",
+  "Get detailed information about a country by ISO code — name, currency, calling code, languages, World Bank region and income level.",
+  {
+    code: z.string().describe("ISO 3166-1 alpha-2 country code (e.g. 'AU', 'US', 'GB')"),
+    localityLanguage: z.string().optional().describe("Language for results. Default: en"),
+  },
+  async ({ code, localityLanguage }) => {
+    const text = await callApi({ endpoint: "country-info", params: { code, localityLanguage }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+server.tool(
+  "all-countries",
+  "Get a full list of all countries with detailed information — names, currencies, calling codes, languages, regions.",
+  {
+    localityLanguage: z.string().optional().describe("Language for results. Default: en"),
+  },
+  async ({ localityLanguage }) => {
+    const text = await callApi({ endpoint: "countries", params: { localityLanguage }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+server.tool(
+  "user-risk",
+  "Get a risk assessment for an IP address suitable for e-commerce and sign-up flows — returns a risk level (Low/Medium/High) and description.",
+  {
+    ip: z.string().describe("IPv4 or IPv6 address to assess"),
+  },
+  async ({ ip }) => {
+    const text = await callApi({ endpoint: "user-risk", params: { ip }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+server.tool(
+  "timezone-by-iana-id",
+  "Get timezone details for a given IANA timezone ID — offset, DST status, display name, and current local time.",
+  {
+    timeZoneId: z.string().describe("IANA timezone ID (e.g. 'Australia/Sydney', 'America/New_York')"),
+    utcReference: z.string().optional().describe("UTC reference time for conversion (ISO 8601)"),
+  },
+  async ({ timeZoneId, utcReference }) => {
+    const text = await callApi({ endpoint: "timezone-info", params: { timeZoneId, utcReference }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+server.tool(
+  "phone-number-validate-by-ip",
+  "Validate a phone number using the caller's IP address for country detection. Use when you know the user's IP but not their country code.",
+  {
+    number: z.string().describe("Phone number to validate"),
+    ip: z.string().describe("End user's IP address for country detection"),
+    localityLanguage: z.string().optional().describe("Language for results. Default: en"),
+  },
+  async ({ number, ip, localityLanguage }) => {
+    const text = await callApi({ endpoint: "phone-number-validate-by-ip", params: { number, ip, localityLanguage }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+// ========================
+// Network Engineering — additional
+// ========================
+
+server.tool(
+  "asn-info-full",
+  "Get extended ASN information including upstream providers (receiving-from), downstream peers (transit-to), prefix counts, rank, and service area polygon.",
+  {
+    asn: z.string().describe("AS number (e.g. 'AS13335' or '13335')"),
+    localityLanguage: z.string().optional().describe("Language for results. Default: en"),
+  },
+  async ({ asn, localityLanguage }) => {
+    const text = await callApi({ endpoint: "asn-info-full", params: { asn, localityLanguage }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+server.tool(
+  "asn-receiving-from",
+  "Get paginated list of upstream providers for an ASN — the networks this ASN receives traffic from (peering/transit relationships).",
+  {
+    asn: z.string().describe("AS number (e.g. 'AS13335')"),
+    batchSize: z.number().optional().describe("Number of results per page (default 25)"),
+    offset: z.number().optional().describe("Pagination offset"),
+    localityLanguage: z.string().optional().describe("Language for results. Default: en"),
+  },
+  async ({ asn, batchSize, offset, localityLanguage }) => {
+    const text = await callApi({ endpoint: "asn-info-receiving-from", params: { asn, batchSize, offset, localityLanguage }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+server.tool(
+  "asn-transit-to",
+  "Get paginated list of downstream peers for an ASN — the networks this ASN provides transit to.",
+  {
+    asn: z.string().describe("AS number (e.g. 'AS13335')"),
+    batchSize: z.number().optional().describe("Number of results per page (default 25)"),
+    offset: z.number().optional().describe("Pagination offset"),
+    localityLanguage: z.string().optional().describe("Language for results. Default: en"),
+  },
+  async ({ asn, batchSize, offset, localityLanguage }) => {
+    const text = await callApi({ endpoint: "asn-info-transit-to", params: { asn, batchSize, offset, localityLanguage }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+server.tool(
+  "bgp-prefixes",
+  "Get paginated list of active BGP prefixes announced by an ASN. Use isIPv4=true for IPv4 prefixes, false for IPv6.",
+  {
+    asn: z.string().describe("AS number (e.g. 'AS13335')"),
+    isIPv4: z.boolean().optional().describe("true for IPv4 prefixes (default), false for IPv6"),
+    batchSize: z.number().optional().describe("Number of results per page (default 25)"),
+    offset: z.number().optional().describe("Pagination offset"),
+  },
+  async ({ asn, isIPv4, batchSize, offset }) => {
+    const isv4 = isIPv4 === false ? "false" : "true";
+    const text = await callApi({ endpoint: "prefixes-list", params: { asn, isv4, batchSize, offset }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+server.tool(
+  "networks-by-cidr",
+  "Get all networks announced on BGP within a given CIDR range — useful for finding what networks overlap with a specific IP block.",
+  {
+    cidr: z.string().describe("CIDR notation (e.g. '1.1.1.0/24', '8.8.8.0/24')"),
+    localityLanguage: z.string().optional().describe("Language for results. Default: en"),
+  },
+  async ({ cidr, localityLanguage }) => {
+    const text = await callApi({ endpoint: "network-by-cidr", params: { cidr, localityLanguage }, requiresKey: true });
+    return ok(text);
+  }
+);
+
+server.tool(
+  "asn-rank-list",
+  "Get a paginated ranked list of all ASNs sorted by IPv4 address space. Useful for identifying the largest networks on the internet.",
+  {
+    batchSize: z.number().optional().describe("Number of results per page (default 15)"),
+    offset: z.number().optional().describe("Pagination offset"),
+  },
+  async ({ batchSize, offset }) => {
+    const text = await callApi({ endpoint: "asn-rank-list", params: { batchSize, offset }, requiresKey: true });
     return ok(text);
   }
 );

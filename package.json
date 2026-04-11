@@ -1,6 +1,6 @@
 {
   "name": "@bigdatacloudapi/mcp-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "BigDataCloud MCP Server — IP Geolocation, Reverse Geocoding, Network, Timezone, Phone/Email Validation and more for AI assistants",
   "main": "dist/index.js",
   "bin": {
