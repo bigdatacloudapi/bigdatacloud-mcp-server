@@ -1,0 +1,11 @@
+timestamp,userId,endpointId,clientId,profileId,question,action,trigger,triggerValue,spoofTarget,protocol,rrType,statusCode,sourceIp,sourceASN,sourceISP,sourceCity,sourceCountryCode,answers,answerASN,answerISP,answerCity,answerCountryCode
+2026-02-01T09:14:02Z,u1,ep-laptop,c1,p1,graph.facebook.com,1,default,,,DOH,A,0,203.0.113.10,AS577,Bell,Calgary,CA,157.240.22.35,AS32934,Facebook,Menlo Park,US
+2026-02-01T09:14:05Z,u1,ep-laptop,c1,p1,cdn.jsdelivr.net,1,default,,,DOH,A,0,203.0.113.10,AS577,Bell,Calgary,CA,151.101.1.229;151.101.65.229,AS54113,Fastly,San Francisco,US
+2026-02-01T09:15:41Z,u1,ep-phone,c2,p1,my-paypal-verify-account.xyz,0,filter,malware,,DOH,A,0,203.0.113.10,AS577,Bell,Calgary,CA,0.0.0.0,AS0,,,
+2026-02-01T09:16:00Z,u1,ep-phone,c2,p1,dns.google,1,default,,,DOH,A,0,203.0.113.10,AS577,Bell,Calgary,CA,8.8.8.8,AS15169,Google,Mountain View,US
+2026-02-01T09:17:22Z,u1,ep-tv,c3,p2,kjxhqwbrmzptv7.top,1,default,,,UDP,A,0,203.0.113.10,AS577,Bell,Calgary,CA,45.147.229.10,AS204601,Unknown,Amsterdam,NL
+2026-02-01T09:18:03Z,u1,ep-laptop,c1,p1,intranet.corp.example,1,default,,,DOH,A,0,203.0.113.10,AS577,Bell,Calgary,CA,192.168.7.20,AS0,,,
+2026-02-01T09:19:44Z,u1,ep-laptop,c1,p1,a4f2c9d1e8b7.trycloudflare.com,1,default,,,DOH,A,0,203.0.113.10,AS577,Bell,Calgary,CA,104.21.44.9,AS13335,Cloudflare,Toronto,CA
+2026-02-01T09:21:10Z,u1,ep-phone,c2,p1,paypal.com.secure-login.cfd,0,filter,phishing,,DOH,A,0,203.0.113.10,AS577,Bell,Calgary,CA,0.0.0.0,AS0,,,
+2026-02-01T09:22:31Z,u1,ep-laptop,c1,p1,www.google.com,1,default,,,DOH,A,0,203.0.113.10,AS577,Bell,Calgary,CA,142.250.217.100,AS15169,Google,Mountain View,US
+2026-02-01T09:24:12Z,u1,ep-tv,c3,p2,mask.icloud.com,1,default,,,DOH,A,0,203.0.113.10,AS577,Bell,Calgary,CA,172.224.42.11,AS714,Apple,Cupertino,US
