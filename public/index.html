@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>urlscan-verify</title>
+<style>
+:root{
+  --ground:#eef0f5; --panel:#fff; --panel-2:#f6f7fb; --ink:#14172a; --muted:#666d85;
+  --rule:#d6dae6; --signal:#3b1fd4; --crit:#c4006b; --warn:#9a5200; --notice:#0a5fa8;
+  --ok:#0b6e58; --unknown:#7a809a;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --ground:#0e1018; --panel:#171a25; --panel-2:#1e2231; --ink:#e7e9f2; --muted:#9aa1ba;
+    --rule:#2b3145; --signal:#8f7dff; --crit:#ff6fae; --warn:#e6a44a;
+    --notice:#5fb0ff; --ok:#4fd0ab; --unknown:#8991ab;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,button,.lbl,.tab{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.lbl{font-size:10px;font-weight:650;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+a{color:var(--signal)}
+code{background:var(--panel-2);padding:1px 5px;border-radius:3px;font-size:12px}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px 80px}
+header.top{
+  border-bottom:1px solid var(--rule); background:var(--panel); position:sticky; top:0; z-index:20;
+}
+.top-in{max-width:1180px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{font-family:system-ui,sans-serif;font-weight:700;font-size:16px;letter-spacing:-.02em}
+.brand span{color:var(--muted);font-weight:400;font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin-left:8px}
+.keystate{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--unknown);display:inline-block}
+.dot.on{background:var(--ok)} .dot.off{background:var(--crit)}
+
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:18px;margin-top:18px}
+.card h2{margin:0 0 4px;font-size:15px;font-weight:650}
+.card p.sub{margin:0 0 14px;color:var(--muted);font-size:12px;max-width:74ch}
+
+button{
+  font:inherit;font-family:system-ui,sans-serif;font-size:12px;font-weight:600;cursor:pointer;
+  background:var(--ink);color:var(--panel);border:0;border-radius:4px;padding:9px 16px;
+}
+button:hover{background:var(--signal);color:#fff}
+button[disabled]{opacity:.45;cursor:not-allowed}
+button.ghost{background:transparent;color:var(--muted);border:1px solid var(--rule)}
+button.ghost:hover{color:var(--ink);border-color:var(--ink);background:transparent}
+button.ghost.sel{border-color:var(--signal);color:var(--signal)}
+button:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+input[type=text],input[type=password],select,input[type=number]{
+  font:inherit;background:var(--panel);color:var(--ink);border:1px solid var(--rule);
+  border-radius:4px;padding:9px 11px;min-width:0;
+}
+input:focus-visible,select:focus-visible{outline:2px solid var(--signal);outline-offset:-1px;border-color:var(--signal)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+select[multiple]{min-width:210px;font-size:12px;padding:4px}
+.grow{flex:1 1 260px}
+
+.drop{
+  border:1.5px dashed var(--rule);border-radius:6px;padding:34px 18px;text-align:center;
+  cursor:pointer;color:var(--muted);background:var(--panel-2);transition:.15s;
+}
+.drop:hover,.drop.hot{border-color:var(--signal);color:var(--ink);background:var(--panel)}
+.drop b{display:block;font-family:system-ui,sans-serif;font-size:14px;color:var(--ink);margin-bottom:4px}
+.drop:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--rule);
+  border:1px solid var(--rule);border-radius:5px;overflow:hidden;margin:14px 0}
+.fact{background:var(--panel);padding:10px 12px}
+.fact b{display:block;font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+.fact s{display:block;text-decoration:none;color:var(--muted);font-size:11px;margin-top:1px}
+
+.scoreboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px;margin:6px 0 16px}
+.score{border:1px solid var(--rule);border-radius:5px;padding:10px 12px;background:var(--panel);cursor:pointer;text-align:left;font-family:inherit}
+.score:hover{border-color:var(--ink);background:var(--panel-2);color:inherit}
+.score[aria-pressed=true]{border-color:currentColor;box-shadow:inset 0 0 0 1px currentColor}
+.score b{display:block;font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.score .lbl{color:inherit;opacity:.85}
+.s-critical{color:var(--crit)} .s-warning{color:var(--warn)} .s-notice{color:var(--notice)}
+.s-clean{color:var(--ok)} .s-unknown{color:var(--unknown)}
+
+.bar{height:6px;border-radius:3px;background:var(--panel-2);overflow:hidden;border:1px solid var(--rule)}
+.bar i{display:block;height:100%;background:var(--signal);width:0;transition:width .2s}
+.prog{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);margin-top:8px}
+.prog .now{font-variant-numeric:tabular-nums}
+
+table{border-collapse:collapse;width:100%;font-size:12px}
+.tablewrap{border:1px solid var(--rule);border-radius:5px;overflow:auto;background:var(--panel);max-height:70vh}
+th{position:sticky;top:0;background:var(--panel-2);text-align:left;font-family:system-ui,sans-serif;
+  font-size:10px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  padding:9px 10px;border-bottom:1px solid var(--rule);white-space:nowrap;z-index:1}
+td{padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--panel-2)}
+td.name{font-weight:500;word-break:break-all;max-width:340px}
+td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:650;
+  font-family:system-ui,sans-serif;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.tag.critical{background:var(--crit);color:#fff}
+.tag.warning{background:var(--warn);color:#fff}
+.tag.notice{background:var(--notice);color:#fff}
+.tag.clean{background:transparent;color:var(--ok);box-shadow:inset 0 0 0 1px currentColor}
+.tag.unknown{background:transparent;color:var(--unknown);box-shadow:inset 0 0 0 1px currentColor}
+tr.detail td{background:var(--panel-2);cursor:default}
+tr.detail ul{margin:0;padding-left:18px}
+tr.detail li{margin:3px 0}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:3px 12px;margin-top:8px;font-size:12px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;word-break:break-all}
+
+.msg{border-left:3px solid var(--rule);background:var(--panel-2);padding:11px 13px;margin-top:12px;font-size:12px}
+.msg.err{border-color:var(--crit)} .msg.ok{border-color:var(--ok)} .msg.warn{border-color:var(--warn)}
+.hide{display:none !important}
+.foot{margin-top:26px;color:var(--muted);font-size:11px;line-height:1.7;max-width:88ch}
+.spin{display:inline-block;width:10px;height:10px;border:2px solid var(--rule);border-top-color:var(--signal);
+  border-radius:50%;animation:sp .6s linear infinite;vertical-align:-1px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">urlscan-verify<span>local</span></div>
+    <div class="keystate" id="keystate"><span class="dot"></span><span>checking…</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- 1. API KEY -->
+  <section class="card" id="cardKey">
+    <h2>urlscan API key</h2>
+    <p class="sub">
+      The key is verified against urlscan and then stored at <code>~/.urlscan-verify/config.json</code>
+      with owner-only permissions. It stays on this machine — this page never receives it back.
+      Get one free under <a href="https://urlscan.io/user/apikey" target="_blank" rel="noopener">Settings &amp; API</a> on urlscan.io.
+    </p>
+    <div class="row">
+      <input type="password" id="key" class="grow" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false">
+      <button id="saveKey">Verify &amp; save</button>
+      <button class="ghost" id="clearKey">Remove stored key</button>
+    </div>
+    <div id="keyMsg"></div>
+  </section>
+
+  <!-- 2. CSV -->
+  <section class="card">
+    <h2>Your CSV</h2>
+    <p class="sub">
+      Drop any CSV with hostnames or addresses in it — a Control D or Pi-hole export, a firewall log,
+      a spreadsheet of domains. The columns are detected from the contents, and the file is parsed
+      here on your machine; it is never uploaded.
+    </p>
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a CSV file">
+      <b>Drop a CSV here</b>
+      or click to choose a file
+    </div>
+    <input type="file" id="file" accept=".csv,.tsv,.txt,text/csv" class="hide">
+    <div id="analyzeMsg"></div>
+    <div id="preview" class="hide">
+      <div class="facts" id="facts"></div>
+      <div class="row" style="margin-bottom:10px">
+        <label class="lbl" for="hostCol">Hostnames from</label>
+        <select id="hostCol" multiple size="4"></select>
+        <label class="lbl" for="ipCol">Addresses from</label>
+        <select id="ipCol" multiple size="4"></select>
+      </div>
+      <div class="row">
+        <button id="run">Verify against urlscan</button>
+        <button class="ghost" id="runOffline">Structure checks only</button>
+        <label class="row" style="gap:5px;color:var(--muted);font-size:12px">
+          <input type="number" id="limit" min="0" step="25" value="0" style="width:90px"> cap hostnames (0 = all)
+        </label>
+        <label class="row" style="gap:5px;color:var(--muted);font-size:12px">
+          <input type="checkbox" id="deep"> widen to apex when suspicious
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label class="lbl" for="allow" style="min-width:90px">Trusted domains</label>
+        <input type="text" id="allow" class="grow" placeholder="acme.com, corp.example — suppresses brand and lure signals for these" spellcheck="false">
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. PROGRESS -->
+  <section class="card hide" id="cardRun">
+    <h2>Checking</h2>
+    <div class="bar"><i id="barFill"></i></div>
+    <div class="prog">
+      <span class="spin" id="spin"></span>
+      <span class="now" id="progNow">0 / 0</span>
+      <span id="progCur" style="flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <button class="ghost" id="stop">Stop</button>
+    </div>
+    <p class="sub" style="margin-top:10px">
+      One urlscan query per unique name, paced to stay inside the free tier's per-minute limit.
+      Answers are cached for a day, so re-running the same file costs nothing.
+    </p>
+  </section>
+
+  <!-- 4. RESULTS -->
+  <section class="card hide" id="cardResults">
+    <h2>Results</h2>
+    <p class="sub" id="resultSub"></p>
+    <div class="scoreboard" id="scoreboard"></div>
+    <div class="row" style="margin-bottom:10px">
+      <input type="text" id="filter" class="grow" placeholder="filter by name…" spellcheck="false">
+      <button class="ghost" id="expJson">JSON</button>
+      <button class="ghost" id="expCsv">CSV</button>
+      <button class="ghost" id="expMd">Markdown</button>
+      <button class="ghost" id="expBlock">Router blocklists…</button>
+    </div>
+    <div id="blockPanel" class="hide">
+      <div class="msg">
+        <div class="row" style="margin-bottom:8px">
+          <label class="lbl" style="min-width:88px">Include</label>
+          <label style="font-size:12px"><input type="checkbox" class="bsev" value="critical" checked> flagged</label>
+          <label style="font-size:12px"><input type="checkbox" class="bsev" value="warning"> check this</label>
+          <label style="font-size:12px"><input type="checkbox" class="bsev" value="notice"> worth a look</label>
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <label class="lbl" style="min-width:88px">Set name</label>
+          <input type="text" id="setName" value="urlscan_verify" style="width:180px">
+          <label class="lbl">pbr interface</label>
+          <input type="text" id="pbrIface" value="wan" style="width:110px">
+        </div>
+        <div class="row">
+          <label class="lbl" style="min-width:88px">Save to</label>
+          <input type="text" id="saveDir" class="grow" value="urlscan-verify-export" placeholder="directory, relative to where you started the server">
+          <button id="doSave">Write files</button>
+        </div>
+        <div id="blockMsg"></div>
+      </div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th>Verdict</th><th>Name</th><th class="num">Rows</th><th class="num">Scans</th>
+          <th>Network</th><th>Why</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot">
+    <b>How to read a verdict.</b> urlscan.io only knows about URLs somebody submitted to it.
+    A name with no scans is not vouched for — it has no public history, which is the normal state for
+    first-party telemetry. Threat verdicts come from submitter tags, not from
+    <code>verdicts.overall.malicious</code>: that field is gated below a Pro plan and reads
+    <code>false</code> even on scans a submitter tagged as phishing, so anything built on it would
+    call everything clean.
+  </p>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
