@@ -26,7 +26,7 @@ const USAGE = `
 urlscan-verify — check the domains and IPs in a CSV against urlscan.io
 
   urlscan-verify verify <file.csv> [options]
-  urlscan-verify serve [--port 8787]
+  urlscan-verify serve [--port 8787] [--host 0.0.0.0]
   urlscan-verify mcp
   urlscan-verify config [--key <uuid>] [--show] [--clear-cache]
   urlscan-verify quotas
@@ -249,7 +249,12 @@ try {
       break;
     case "serve": {
       const { serve } = await import("../src/server.mjs");
-      await serve({ port: Number(args.port) || readConfig().port });
+      await serve({
+        port: Number(args.port) || readConfig().port,
+        // Loopback by default. --host opens it to the network, which is how you
+        // reach it from a phone over a LAN or a tailnet.
+        host: args.host && args.host !== true ? String(args.host) : "127.0.0.1",
+      });
       break;
     }
     case "mcp": {

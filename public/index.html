@@ -2,9 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="robots" content="noindex, nofollow">
 <title>urlscan-verify</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="/icon-180.png">
 <style>
 :root{
   --ground:#eef0f5; --panel:#fff; --panel-2:#f6f7fb; --ink:#14172a; --muted:#666d85;
@@ -122,6 +127,61 @@ tr.detail li{margin:3px 0}
 .spin{display:inline-block;width:10px;height:10px;border:2px solid var(--rule);border-top-color:var(--signal);
   border-radius:50%;animation:sp .6s linear infinite;vertical-align:-1px}
 @keyframes sp{to{transform:rotate(360deg)}}
+/* ── columns picker ────────────────────────────────── */
+.cols{margin:14px 0;border:1px solid var(--rule);border-radius:5px;background:var(--panel-2)}
+.cols summary{cursor:pointer;padding:9px 12px;font-family:system-ui,sans-serif;font-size:12px;color:var(--muted)}
+.cols summary:hover{color:var(--ink)}
+.cols[open] summary{border-bottom:1px solid var(--rule)}
+.colgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;padding:12px}
+.colgrid label{display:block;margin-bottom:4px}
+.colgrid select{width:100%}
+
+/* ── phone ─────────────────────────────────────────────
+   Under 720px the six-column table stops being a table and becomes a stack of
+   cards: the header row is hidden and each cell names itself from data-label.
+   A horizontally scrolling table on a phone is a table nobody reads. */
+@media (max-width:720px){
+  body{font-size:14px}
+  .wrap{padding:0 12px 60px}
+  .top-in{padding:10px 12px}
+  .card{padding:14px;border-radius:8px}
+  .card h2{font-size:16px}
+  .drop{padding:26px 12px}
+  button{padding:11px 16px;font-size:13px}
+  input[type=text],input[type=password],select,input[type=number]{padding:11px;font-size:16px}
+  .scoreboard{grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:6px}
+  .score{padding:8px 9px}
+  .score b{font-size:17px}
+  .score .lbl{font-size:9px;letter-spacing:.08em}
+
+  .tablewrap{border:0;background:transparent;max-height:none;overflow:visible}
+  table,tbody,tr,td{display:block;width:100%}
+  thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  tbody tr{
+    border:1px solid var(--rule);border-radius:6px;background:var(--panel);
+    margin-bottom:8px;padding:10px 12px;
+  }
+  tbody tr:hover{background:var(--panel)}
+  td{border:0;padding:2px 0;white-space:normal}
+  td[data-label]:not(:empty)::before{
+    content:attr(data-label);display:inline-block;min-width:60px;margin-right:10px;
+    font-family:system-ui,sans-serif;font-size:10px;font-weight:650;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);vertical-align:baseline;
+  }
+  td:empty{display:none}
+  td.verdict{margin-bottom:5px}
+  td.name{font-size:14px;font-weight:600;max-width:none;word-break:break-all}
+  td.name::before{display:none}
+  td.num{text-align:left}
+  td.why{color:var(--muted)}
+  tr.detail{border:0;background:transparent;padding:0;margin:-6px 0 8px}
+  tr.detail td{background:var(--panel-2);border:1px solid var(--rule);border-radius:6px;padding:10px 12px}
+  .kv{grid-template-columns:1fr;gap:1px}
+  .kv dt{margin-top:6px}
+  .prog{flex-wrap:wrap}
+  .foot{font-size:12px}
+}
+
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -140,14 +200,19 @@ tr.detail li{margin:3px 0}
   <section class="card" id="cardKey">
     <h2>urlscan API key</h2>
     <p class="sub">
-      The key is verified against urlscan and then stored at <code>~/.urlscan-verify/config.json</code>
-      with owner-only permissions. It stays on this machine — this page never receives it back.
+      Stored at <code>~/.urlscan-verify/config.json</code> with owner-only permissions after being verified
+      against urlscan. This page never receives it back — only a masked form of it.
       Get one free under <a href="https://urlscan.io/user/apikey" target="_blank" rel="noopener">Settings &amp; API</a> on urlscan.io.
     </p>
-    <div class="row">
-      <input type="password" id="key" class="grow" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false">
+    <div class="row" id="keyForm">
+      <input type="password" id="key" class="grow" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false" inputmode="text">
       <button id="saveKey">Verify &amp; save</button>
       <button class="ghost" id="clearKey">Remove stored key</button>
+    </div>
+    <div id="keyHosted" class="msg warn hide">
+      This deployment reads its key from the <code>URLSCAN_API_KEY</code> environment variable and cannot
+      store one from the browser. Set it in your hosting project's settings and redeploy. You can still
+      run <b>structure checks only</b> below without any key.
     </div>
     <div id="keyMsg"></div>
   </section>
@@ -168,12 +233,14 @@ tr.detail li{margin:3px 0}
     <div id="analyzeMsg"></div>
     <div id="preview" class="hide">
       <div class="facts" id="facts"></div>
-      <div class="row" style="margin-bottom:10px">
-        <label class="lbl" for="hostCol">Hostnames from</label>
-        <select id="hostCol" multiple size="4"></select>
-        <label class="lbl" for="ipCol">Addresses from</label>
-        <select id="ipCol" multiple size="4"></select>
-      </div>
+      <details class="cols">
+        <summary>Columns — detected automatically, change if wrong</summary>
+        <div class="colgrid">
+          <div><label class="lbl" for="hostCol">Hostnames from</label><select id="hostCol" multiple size="4"></select></div>
+          <div><label class="lbl" for="ipCol">Addresses from</label><select id="ipCol" multiple size="4"></select></div>
+        </div>
+        <button class="ghost" id="recolumn" style="margin-top:8px">Re-read with these columns</button>
+      </details>
       <div class="row">
         <button id="run">Verify against urlscan</button>
         <button class="ghost" id="runOffline">Structure checks only</button>
@@ -233,10 +300,14 @@ tr.detail li{margin:3px 0}
           <label class="lbl">pbr interface</label>
           <input type="text" id="pbrIface" value="wan" style="width:110px">
         </div>
-        <div class="row">
+        <div class="row" id="saveRow">
           <label class="lbl" style="min-width:88px">Save to</label>
           <input type="text" id="saveDir" class="grow" value="urlscan-verify-export" placeholder="directory, relative to where you started the server">
           <button id="doSave">Write files</button>
+        </div>
+        <div class="row hide" id="downloadRow">
+          <button id="doDownload">Download the files</button>
+          <span class="mono-dim" style="font-size:11px;color:var(--muted)">your browser may ask to allow multiple downloads</span>
         </div>
         <div id="blockMsg"></div>
       </div>
