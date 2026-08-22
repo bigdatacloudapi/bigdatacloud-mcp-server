@@ -8,16 +8,21 @@ It answers that with [urlscan.io](https://urlscan.io)'s archive plus a set of
 offline structure checks, and it can turn what it finds into blocklists your
 router will actually eat.
 
-Three ways to use it, all the same engine:
+Four ways to use it, all the same engine:
 
-- **A local web app** — drag a CSV onto a page, watch it work, export the results.
+- **A web app** — drag a CSV on, watch it work, export the results. Run it on
+  your own machine, or deploy it and use it from your phone.
 - **A command line tool** — `urlscan-verify verify export.csv`, exits non-zero if
   anything is flagged, so it fits in a cron job.
 - **An MCP server for Claude Code** — ask Claude "check this CSV" and it drives
-  the verifier itself. Uses your existing Claude subscription; there is no
-  Anthropic API key anywhere in this project.
+  the verifier itself.
+- **A Claude connector** — the same tools over HTTPS, so Claude on the web and
+  on your phone can use them too.
 
-No dependencies, no build step, no account except a free urlscan key.
+Either way Claude runs on your existing subscription; there is no Anthropic API
+key anywhere in this project. The only key involved is a free urlscan one.
+
+No dependencies, no build step.
 
 ---
 
@@ -70,6 +75,110 @@ process and is never uploaded anywhere.** The only thing that leaves your machin
 is one urlscan query per unique hostname or address.
 
 ![the results view](docs/screenshot.png)
+
+## On your phone
+
+Two routes, and they are not exclusive — deploying gets you both.
+
+### Deploy it
+
+The project is a zero-config [Vercel](https://vercel.com) app. Everything under
+`public/` is the page; everything under `api/` is a function.
+
+```bash
+npm i -g vercel
+vercel link
+vercel env add URLSCAN_API_KEY production     # prompts on stdin, so it stays out of your shell history
+vercel --prod
+```
+
+Open the URL on your phone and use it exactly as you would locally. On iOS,
+Share → Add to Home Screen installs it; on Android, the browser offers the same
+from its menu. It ships a web manifest and icons, so it launches without browser
+chrome and behaves like an app.
+
+**Lock it down.** A deployment with your key in it can spend your urlscan quota.
+In the Vercel dashboard, Project → Settings → Deployment Protection →
+**Vercel Authentication: All Deployments** restricts the page to your own team.
+Without that the URL is unguessable but not private.
+
+| Variable | Needed for | Notes |
+|---|---|---|
+| `URLSCAN_API_KEY` | everything | The UUID from urlscan Settings & API |
+| `MCP_SIGNING_SECRET` | the connector | `openssl rand -hex 32` |
+| `MCP_PUBLIC_URL` | the connector | e.g. `https://your-app.vercel.app`, no trailing slash |
+| `AUTH_MODE` | the connector | `ipallow` (default) or `oauth` |
+| `MCP_PASSWORD` | `oauth` mode | the password you type on the consent screen |
+| `EXTRA_ALLOW_CIDRS` | `ipallow` mode | optional, to test from your own address |
+
+Vercel injects environment variables at build time, so redeploy after changing
+any of them.
+
+A hosted deployment reads its key from `URLSCAN_API_KEY` and cannot store one
+from the browser — the page says so rather than offering a dead control.
+
+### Or keep it on your Mac and reach it privately
+
+If you would rather your CSVs never left the house, run `urlscan-verify serve`
+on the Mac and reach it from your phone over [Tailscale](https://tailscale.com)
+or your LAN. The server binds to loopback by default; `--host 0.0.0.0` opens it
+to the network, which is only sensible on a network you trust or a private
+tailnet.
+
+## Claude on the web and on your phone
+
+Claude connectors are account-level: add it once and it is there on the web app
+and the mobile apps.
+
+1. Deploy, with `URLSCAN_API_KEY`, `MCP_SIGNING_SECRET` and `MCP_PUBLIC_URL` set.
+2. In Claude: Settings → Connectors → **Add custom connector**.
+3. URL: `https://YOUR-APP.vercel.app/mcp`
+4. In `oauth` mode you will be redirected to a consent screen — enter
+   `MCP_PASSWORD`. Leave the Client ID and Secret fields blank; registration is
+   dynamic.
+
+Then, from anywhere: *"here is my Control D export, check it"* — paste the CSV
+and Claude runs the same verifier.
+
+Custom connectors need a Pro, Max, Team or Enterprise plan. Claude connects from
+Anthropic's cloud rather than from your handset, so the endpoint has to be
+publicly reachable — something behind a VPN or a LAN will not connect.
+
+### Who can reach it
+
+`AUTH_MODE` picks one of two postures.
+
+**`ipallow`** (the default) accepts only Anthropic's documented connector egress
+range, `160.79.104.0/21`. Nothing else on the internet can reach the endpoint.
+The residual risk is that another Claude user who learned your URL would also be
+arriving from that range — so this protects your quota, but it is not an
+identity boundary.
+
+**`oauth`** is OAuth 2.1 with Dynamic Client Registration and PKCE, gated by a
+single password you set. Use it if the URL might get out. It is implemented
+statelessly — the `client_id` and the authorization code are themselves signed
+blobs — so there is no database and nothing to persist.
+
+Claude's connector UI offers OAuth and nothing else: there is no field for a
+bearer token or a custom header, and the MCP spec prohibits credentials in the
+connector URL. Those two modes are the whole available design space.
+
+Verify a deployment before connecting:
+
+```bash
+BASE=https://YOUR-APP.vercel.app
+curl -s $BASE/.well-known/oauth-protected-resource | jq
+
+# ipallow: a 403 from your own address is the correct answer
+curl -s -X POST $BASE/mcp -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+If Claude says "couldn't reach the MCP server", check `MCP_PUBLIC_URL` first:
+the `resource` field it produces must match the URL you typed in exactly, path
+included.
+
+![on a phone](docs/screenshot-phone.png)
 
 ## The command line
 
@@ -145,8 +254,13 @@ absolute path, since Desktop does not launch from the project directory:
 | `urlscan_result` | One scan in detail, by UUID |
 | `urlscan_scan` | Submit a URL for a fresh scan |
 | `urlscan_quotas` | What is left of your urlscan budget |
-| `export_blocklist` | Write the dnsmasq / nftables / pbr files |
-| `verification_report` | The last run as a Markdown write-up |
+| `export_blocklist` | Build the dnsmasq / nftables / pbr files from a list you pass it |
+| `verification_report` | The last run as a Markdown write-up (local server only) |
+
+Over HTTP the tool set adapts: there is no filesystem, so `verify_csv` takes the
+CSV in `content` rather than by path, and checks it in bounded runs — when
+`progress.nextOffset` comes back non-null, Claude calls again with that offset
+to continue.
 
 ---
 
@@ -278,8 +392,18 @@ your network can no longer reach.
 
 urlscan's free tier is limited per minute, per hour and per day, independently
 per action. Calls are serialised with a ~900 ms gap, retried once on a 429, and
-cached on disk for 24 hours — so re-running the same file costs nothing, and a
-run stopped by a rate limit picks up where it left off.
+cached for 24 hours — so re-running the same file costs nothing, and a run
+stopped by a rate limit picks up where it left off.
+
+The web app verifies in small batches rather than in one long request. That is
+what lets a run of several hundred names survive a serverless function timeout,
+resume after a rate limit, and show results as they arrive instead of after a
+long blank wait. The local server takes the same path — it does not need to, but
+one code path that gets exercised everywhere beats two that drift.
+
+On a hosted deployment the response cache lives in `/tmp`, which is the only
+writable path a serverless function has. A warm instance keeps it and a cold one
+starts empty, so treat it as a bonus rather than a guarantee.
 
 A 900-name export takes about fifteen minutes. Start with `--limit 100` to see
 the shape of a file before committing to the whole thing.
@@ -289,24 +413,38 @@ urlscan-verify quotas         # what is left
 urlscan-verify config --clear-cache
 ```
 
-## Why it runs locally
+## Local or hosted
 
-Everything here is local on purpose. The alternative — deploying this behind a
-URL — means your resolver export is uploaded to a server, the key lives in a
-platform's environment, and a fifteen-minute verification has to survive a
-serverless function timeout. None of that is a trade worth making for a tool
-whose entire input is a log of what your devices talk to.
+They are the same application; the difference is where your CSV gets parsed.
+
+**Local** keeps the file on your machine. Nothing leaves except one urlscan query
+per unique name, the key sits in your home directory, and the server refuses
+anything that is not same-origin loopback.
+
+**Hosted** uploads the CSV to your own deployment so you can use it from a phone,
+and puts the key in the platform's environment. That is a real trade, and worth
+making deliberately: the input to this tool is a log of what your devices talk
+to. If that matters more than phone access, run it locally and reach it over a
+private tailnet instead.
+
+Whichever you pick, the CSV is never sent to urlscan — only the individual
+hostnames and addresses being checked.
 
 ## Development
 
 ```bash
-npm test        # 58 tests, no network, no dependencies
+npm test        # 80 tests, no network, no dependencies
 ```
 
 The suite covers address and hostname parsing, CSV detection against real export
 shapes, heuristic calibration (including that ordinary first-party names stay
 silent), verdict logic against a stubbed urlscan, client rate-limit and cache
 behaviour, and every blocklist output format.
+
+`test/hosted.test.mjs` mounts the real deployment handlers on a local server and
+drives the whole hosted path end to end — routing, capability reporting, batch
+limits, the MCP protocol, both auth modes, and the full OAuth flow including
+PKCE enforcement and refresh rotation.
 
 | File | |
 |---|---|
@@ -317,8 +455,11 @@ behaviour, and every blocklist output format.
 | `src/verify.mjs` | The engine and the scoring |
 | `src/report.mjs` | Terminal, Markdown and CSV output |
 | `src/blocklist.mjs` | Router export formats |
-| `src/server.mjs` | The local web app |
-| `src/mcp.mjs` | The MCP server |
+| `src/api.mjs` | The HTTP API, shared by both deployments |
+| `src/server.mjs` | The local web server |
+| `src/mcp.mjs` | The MCP tools and the stdio server |
+| `src/auth.mjs` | Stateless OAuth and IP-allow primitives |
+| `api/` | The hosted build's functions |
 
 ## Licence
 

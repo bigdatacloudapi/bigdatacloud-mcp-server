@@ -19,11 +19,22 @@ verdict logic.
 | A pivot the verifier does not cover | `urlscan_search` |
 | Detail on one specific scan | `urlscan_result` |
 | Turning findings into router config | `export_blocklist` |
-| A saved write-up | `verification_report` |
+| A saved write-up | `verification_report` (local server only) |
+
+Which tools exist depends on the transport. The local stdio server can read a
+CSV off disk and write files back; a hosted deployment reached over HTTP cannot
+do either, so there `verify_csv` takes the CSV in `content` and
+`export_blocklist` hands the file contents back instead of saving them.
 
 `verify_csv` detects the relevant columns itself. Do not pre-process the file,
 do not extract the domains into a list first, and do not ask which column to
-use — hand it the path.
+use — hand it the path (or the content).
+
+**Continuing a large run.** Over HTTP each call is bounded so it finishes inside
+the platform's function timeout. When the result's `progress.nextOffset` comes
+back non-null, call `verify_csv` again with that `offset` and the same
+`content`. Keep going until `nextOffset` is null, or until you have enough to
+answer — and if you stop early, say how much of the file you actually covered.
 
 ## Reading the verdicts
 
@@ -74,7 +85,10 @@ think to ask:
   split-horizon override, or a redirected answer, and it is worth explaining
   before trusting it.
 
-If the user wants to act on the findings, `export_blocklist` writes dnsmasq,
-hosts, nftables and OpenWrt `pbr` files. Default it to `critical` only, and tell
-them to read `domains.txt` before deploying — a false positive there becomes a
-name their network can no longer reach.
+If the user wants to act on the findings, `export_blocklist` produces dnsmasq,
+hosts, nftables and OpenWrt `pbr` files. You pass the domains explicitly, so
+choose them: normally the `critical` ones, minus anything the user has said is
+fine. **Never put an `unknown` in a blocklist** — that verdict means nobody has
+scanned the name, not that it is hostile. Tell them to read `domains.txt` before
+deploying; a false positive there becomes a name their network can no longer
+reach.

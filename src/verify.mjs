@@ -364,7 +364,118 @@ export function crossCheckPair(pair, hostRecord, ipRecord) {
 // ------------------------------------------------------------------ driver
 
 /**
- * Verify an extraction.
+ * Assemble finished host and address records into a report.
+ *
+ * Split out from `verifyExtraction` because the hosted build cannot run a whole
+ * verification inside one request — a serverless function is measured in
+ * seconds and a real export takes minutes. There, the client verifies in small
+ * batches and hands the accumulated records back here to be folded, tallied and
+ * sorted. Local runs take the same path, so there is one assembly routine and
+ * not two that drift.
+ */
+export function assembleReport({ hosts = [], ips = [], pairs = [], scope = {}, api = null, stoppedEarly = false } = {}) {
+  const hostBy = new Map(hosts.map((h) => [h.host, h]));
+  const ipBy = new Map(ips.map((i) => [i.ip, i]));
+
+  const checked = pairs
+    .map((p) => crossCheckPair(p, hostBy.get(p.host), ipBy.get(p.ip)))
+    .filter((p) => p.signals.length > 0);
+
+  // A pair-level finding is a fact about the hostname; fold it back so a reader
+  // scanning the host table sees it without cross-referencing.
+  for (const p of checked) {
+    const host = hostBy.get(p.host);
+    if (!host) continue;
+    for (const s of p.signals) {
+      if (s.weight <= 0) continue;
+      if (host.signals.some((x) => x.id === s.id)) continue; // assembly must stay idempotent
+      host.signals.push(s);
+      host.weight += s.weight;
+      host.severity = severityFor({
+        weight: host.weight,
+        threatTagged: host.signals.some((x) => x.id === "threat-tagged"),
+        hasEvidence: host.scans > 0,
+      });
+    }
+  }
+
+  const tally = (rows) =>
+    SEVERITY_ORDER.reduce((m, s) => ((m[s] = rows.filter((r) => r.severity === s).length), m), {});
+
+  return {
+    generatedAt: new Date().toISOString(),
+    stoppedEarly,
+    scope: {
+      rowCount: 0,
+      uniqueHosts: hosts.length,
+      uniqueIPs: ips.length,
+      hostsChecked: hosts.length,
+      ipsChecked: ips.length,
+      pairsChecked: pairs.length,
+      columns: null,
+      ...scope,
+    },
+    api: api || { calls: 0, cacheHits: 0, rate: null, offline: true },
+    summary: { hosts: tally(hosts), ips: tally(ips), findings: checked.length },
+    hosts: [...hosts].sort(bySeverity),
+    ips: [...ips].sort(bySeverity),
+    pairs: checked.sort(bySeverity),
+  };
+}
+
+/**
+ * Which addresses in an extraction are DNS answers to a *public* name.
+ *
+ * `printer.lan` answering 192.168.1.9 is DNS working correctly, so it must not
+ * arm the rebinding check — otherwise every internal record on the network
+ * buries the real cases.
+ */
+export function answerAddresses(pairs = []) {
+  return new Set(pairs.filter((p) => !isInternalName(p.host)).map((p) => p.ip));
+}
+
+/**
+ * Verify one batch of names and addresses.
+ *
+ * The unit the hosted build calls repeatedly, and the unit a local run loops
+ * over. Kept free of report assembly so it can be called out of order and
+ * resumed after a rate limit.
+ */
+export async function verifyBatch({ hosts = [], ips = [], client = null, allow = [], deep = false, answerIPs = new Set(), onProgress = null } = {}) {
+  const allowApexes = new Set(allow.map((a) => apexOf(a) || normaliseHost(a)).filter(Boolean));
+  const out = { hosts: [], ips: [], rateLimited: false };
+
+  for (const h of hosts) {
+    const name = typeof h === "string" ? h : h.host;
+    const rec = await verifyHost(name, { client, allowApexes, deep });
+    if (typeof h === "object" && h.count) rec.count = h.count;
+    out.hosts.push(rec);
+    onProgress?.({ phase: "hosts", current: name, severity: rec.severity });
+    if (rec.rateLimited) {
+      out.rateLimited = true;
+      return out;
+    }
+  }
+
+  for (const i of ips) {
+    const addr = typeof i === "string" ? i : i.ip;
+    const rec = await verifyIP(addr, { client, asAnswer: answerIPs.has(addr) });
+    if (typeof i === "object" && i.count) rec.count = i.count;
+    out.ips.push(rec);
+    onProgress?.({ phase: "ips", current: addr, severity: rec.severity });
+    if (rec.rateLimited) {
+      out.rateLimited = true;
+      return out;
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Verify a whole extraction in one go.
+ *
+ * Used by the CLI and the local server, where nothing is going to time out.
  *
  * @param {{hosts:Array,ips:Array,pairs:Array}} extraction  from csv.extract()
  * @param {object} opts
@@ -376,87 +487,43 @@ export function crossCheckPair(pair, hostRecord, ipRecord) {
  * @param {(p:object)=>void} [opts.onProgress]
  */
 export async function verifyExtraction(extraction, opts = {}) {
-  const {
-    client = null,
-    limitHosts = 0,
-    limitIPs = 0,
-    allow = [],
-    deep = false,
-    onProgress = null,
-  } = opts;
+  const { client = null, limitHosts = 0, limitIPs = 0, allow = [], deep = false, onProgress = null } = opts;
 
-  const allowApexes = new Set(allow.map((a) => apexOf(a) || normaliseHost(a)).filter(Boolean));
-
-  // An address only counts as "an answer that should have been public" when the
-  // name being resolved was itself public. `printer.lan` answering 192.168.1.9
-  // is DNS working correctly, and flagging it would bury the real rebinding
-  // cases under every internal record on the network.
-  const answerIPs = new Set(extraction.pairs.filter((p) => !isInternalName(p.host)).map((p) => p.ip));
-
+  const answerIPs = answerAddresses(extraction.pairs);
   const hostTargets = limitHosts > 0 ? extraction.hosts.slice(0, limitHosts) : extraction.hosts;
   const ipTargets = limitIPs > 0 ? extraction.ips.slice(0, limitIPs) : extraction.ips;
   const total = hostTargets.length + ipTargets.length;
   let done = 0;
-  let stopped = false;
 
-  const hosts = [];
-  for (const h of hostTargets) {
-    if (stopped) break;
-    const rec = await verifyHost(h.host, { client, allowApexes, deep });
-    rec.count = h.count;
-    hosts.push(rec);
-    done++;
-    onProgress?.({ phase: "hosts", done, total, current: h.host, severity: rec.severity });
-    if (rec.rateLimited) stopped = true;
-  }
+  const batch = await verifyBatch({
+    hosts: hostTargets,
+    ips: ipTargets,
+    client,
+    allow,
+    deep,
+    answerIPs,
+    onProgress: onProgress
+      ? (p) => {
+          done++;
+          onProgress({ ...p, done, total });
+        }
+      : null,
+  });
 
-  const ips = [];
-  for (const i of ipTargets) {
-    if (stopped) break;
-    const rec = await verifyIP(i.ip, { client, asAnswer: answerIPs.has(i.ip) });
-    rec.count = i.count;
-    ips.push(rec);
-    done++;
-    onProgress?.({ phase: "ips", done, total, current: i.ip, severity: rec.severity });
-    if (rec.rateLimited) stopped = true;
-  }
-
-  const hostBy = new Map(hosts.map((h) => [h.host, h]));
-  const ipBy = new Map(ips.map((i) => [i.ip, i]));
-  const pairs = extraction.pairs
-    .map((p) => crossCheckPair(p, hostBy.get(p.host), ipBy.get(p.ip)))
-    .filter((p) => p.signals.length > 0);
-
-  // A pair-level finding is a fact about the hostname; fold it back so a reader
-  // scanning the host table sees it without cross-referencing.
-  for (const p of pairs) {
-    const host = hostBy.get(p.host);
-    if (!host) continue;
-    for (const s of p.signals) {
-      if (s.weight > 0) {
-        host.signals.push({ ...s, detail: s.detail });
-        host.weight += s.weight;
-        host.severity = severityFor({
-          weight: host.weight,
-          threatTagged: host.signals.some((x) => x.id === "threat-tagged"),
-          hasEvidence: host.scans > 0,
-        });
-      }
-    }
-  }
-
-  const tally = (rows) =>
-    SEVERITY_ORDER.reduce((m, s) => ((m[s] = rows.filter((r) => r.severity === s).length), m), {});
-
-  return {
-    generatedAt: new Date().toISOString(),
-    stoppedEarly: stopped,
+  return assembleReport({
+    hosts: batch.hosts,
+    ips: batch.ips,
+    pairs: extraction.pairs,
+    stoppedEarly: batch.rateLimited,
+    api: client
+      ? { calls: client.calls, cacheHits: client.cacheHits, rate: client.lastRate }
+      : { calls: 0, cacheHits: 0, rate: null, offline: true },
     scope: {
       rowCount: extraction.rowCount,
       uniqueHosts: extraction.hosts.length,
       uniqueIPs: extraction.ips.length,
-      hostsChecked: hosts.length,
-      ipsChecked: ips.length,
+      hostsChecked: batch.hosts.length,
+      ipsChecked: batch.ips.length,
       pairsChecked: extraction.pairs.length,
       columns: extraction.columns
         ? {
@@ -465,14 +532,7 @@ export async function verifyExtraction(extraction, opts = {}) {
           }
         : null,
     },
-    api: client
-      ? { calls: client.calls, cacheHits: client.cacheHits, rate: client.lastRate }
-      : { calls: 0, cacheHits: 0, rate: null, offline: true },
-    summary: { hosts: tally(hosts), ips: tally(ips), findings: pairs.length },
-    hosts: hosts.sort(bySeverity),
-    ips: ips.sort(bySeverity),
-    pairs: pairs.sort(bySeverity),
-  };
+  });
 }
 
 const bySeverity = (a, b) => {

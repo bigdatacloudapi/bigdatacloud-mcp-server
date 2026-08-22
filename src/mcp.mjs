@@ -1,5 +1,5 @@
 /**
- * MCP server over stdio.
+ * MCP tools, and the stdio server that exposes them.
  *
  * This is the half of the project that lets Claude Code drive the verifier
  * directly: you point Claude at a CSV and ask what looks wrong, and it calls
@@ -12,8 +12,14 @@
  * install. MCP's stdio transport is newline-delimited JSON, so this is a small
  * amount of code to own.
  *
- * Rule for this file: stdout carries protocol messages and nothing else.
+ * Rule for the stdio server: stdout carries protocol messages and nothing else.
  * Anything diagnostic goes to stderr, or it corrupts the stream.
+ *
+ * The same tools are served over HTTP by api/mcp.mjs for Claude on the web and
+ * on a phone. `createTools({ local })` is what reconciles the two: a hosted
+ * deployment has no user filesystem to read a CSV from or write a blocklist to,
+ * and cannot hold state between requests, so those tools take their input
+ * inline and hand their output back rather than touching disk.
  */
 
 import fs from "node:fs";
@@ -23,19 +29,23 @@ import readline from "node:readline";
 import { extract } from "./csv.mjs";
 import { Cache, maskKey, readConfig, resolveKey } from "./config.mjs";
 import { UrlscanClient, esc } from "./urlscan.mjs";
-import { verifyExtraction } from "./verify.mjs";
+import { answerAddresses, assembleReport, verifyBatch, verifyExtraction } from "./verify.mjs";
 import { renderMarkdown } from "./report.mjs";
 import { buildExports } from "./blocklist.mjs";
 
 const PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
-const SERVER_INFO = { name: "urlscan-verify", version: "1.0.0" };
+const SERVER_INFO = { name: "urlscan-verify", version: "1.1.0" };
 
-/** The most recent report, so export_blocklist does not need it passed back in. */
+/**
+ * The most recent report. Only meaningful for the stdio server, which is a
+ * persistent process; a hosted deployment gets a fresh instance per request, so
+ * its tools never rely on this.
+ */
 let lastReport = null;
 
 const log = (...a) => process.stderr.write(a.join(" ") + "\n");
 
-function client({ noCache = false } = {}) {
+function client_({ noCache = false } = {}) {
   const { key } = resolveKey();
   if (!key) {
     throw new Error(
@@ -98,13 +108,12 @@ function compactReport(report, { maxDetailed = 60 } = {}) {
 
 const commonVerifyProps = {
   offline: { type: "boolean", default: false, description: "Skip urlscan entirely and run structure checks only. Free and instant." },
-  limitHosts: { type: "integer", minimum: 0, default: 0, description: "Only check the N most frequent hostnames. 0 checks all of them." },
-  limitIPs: { type: "integer", minimum: 0, default: 0, description: "Same cap for addresses." },
   allow: { type: "array", items: { type: "string" }, description: "Domains the operator already trusts; suppresses brand and lure signals for them." },
   deep: { type: "boolean", default: false, description: "When a name looks interesting but has no scans, widen the search to its apex. Costs an extra call per name." },
 };
 
-export const TOOLS = [
+export function createTools({ local = true } = {}) {
+  const TOOLS = [
   {
     name: "verify_csv",
     description:
@@ -112,13 +121,28 @@ export const TOOLS = [
       "Detects the relevant columns automatically, so Control D and Pi-hole exports, firewall logs and " +
       "plain domain lists all work without configuration. Returns findings worst-first with the reasons " +
       "for each verdict. This is the main tool — reach for it whenever someone asks whether the names or " +
-      "addresses in a file look wrong.",
+      "addresses in a file look wrong." +
+      (local
+        ? " Give it a `path` to a file on disk, or `content` inline."
+        : " This deployment has no access to your filesystem, so paste the CSV into `content`. " +
+          "Large files are checked in bounded runs: when `nextOffset` comes back non-null, call again " +
+          "with that `offset` to continue."),
     annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: {
       type: "object",
       properties: {
-        path: { type: "string", description: "Path to the CSV file on disk." },
-        content: { type: "string", description: "CSV content inline, if there is no file." },
+        ...(local ? { path: { type: "string", description: "Path to the CSV file on disk." } } : {}),
+        content: { type: "string", description: "CSV content inline." },
+        offset: { type: "integer", minimum: 0, default: 0, description: "Skip this many entries — use the nextOffset from a previous call to continue." },
+        maxEntries: {
+          type: "integer",
+          minimum: 1,
+          maximum: local ? 5000 : 40,
+          default: local ? 0 : 25,
+          description: local
+            ? "Cap on entries checked in this call. 0 checks all of them."
+            : "Cap on entries checked in this call. Kept low so the request finishes inside the platform's function timeout.",
+        },
         ...commonVerifyProps,
       },
       required: [],
@@ -127,6 +151,7 @@ export const TOOLS = [
       let text = a.content;
       let source = "inline CSV";
       if (!text) {
+        if (!local) throw new Error("This deployment cannot read local files — paste the CSV into `content`.");
         if (!a.path) throw new Error("Give either `path` or `content`.");
         const file = path.resolve(a.path);
         if (!fs.existsSync(file)) throw new Error(`No such file: ${file}`);
@@ -141,16 +166,67 @@ export const TOOLS = [
           hint: "If the values sit in an unusual column, say which one and re-run — or use verify_domains with an explicit list.",
         };
       }
-      const report = await verifyExtraction(extraction, {
-        client: a.offline ? null : client(),
-        limitHosts: a.limitHosts ?? 0,
-        limitIPs: a.limitIPs ?? 0,
+
+      // One flat queue so `offset` means the same thing whether a run stopped
+      // part-way through the hostnames or part-way through the addresses.
+      // Hostnames come first because they carry the most signal.
+      const queue = [
+        ...extraction.hosts.map((h) => ({ kind: "host", ...h })),
+        ...extraction.ips.map((i) => ({ kind: "ip", ...i })),
+      ];
+      const offset = Math.max(0, Number(a.offset) || 0);
+      const cap = Number(a.maxEntries ?? (local ? 0 : 25));
+      const slice = cap > 0 ? queue.slice(offset, offset + cap) : queue.slice(offset);
+
+      const api = a.offline ? null : client_();
+      const batch = await verifyBatch({
+        hosts: slice.filter((x) => x.kind === "host"),
+        ips: slice.filter((x) => x.kind === "ip"),
+        client: api,
         allow: a.allow ?? [],
         deep: Boolean(a.deep),
+        answerIPs: answerAddresses(extraction.pairs),
+      });
+
+      const consumed = offset + batch.hosts.length + batch.ips.length;
+      const report = assembleReport({
+        hosts: batch.hosts,
+        ips: batch.ips,
+        pairs: extraction.pairs,
+        stoppedEarly: batch.rateLimited,
+        api: api ? { calls: api.calls, cacheHits: api.cacheHits, rate: api.lastRate } : null,
+        scope: {
+          rowCount: extraction.rowCount,
+          uniqueHosts: extraction.hosts.length,
+          uniqueIPs: extraction.ips.length,
+          hostsChecked: batch.hosts.length,
+          ipsChecked: batch.ips.length,
+          pairsChecked: extraction.pairs.length,
+          columns: extraction.columns
+            ? {
+                hosts: extraction.columns.hostCols?.map((c) => c.header) ?? [],
+                ips: extraction.columns.ipCols?.map((c) => `${c.header}${c.role === "source" ? " (source)" : ""}`) ?? [],
+              }
+            : null,
+        },
       });
       report.source = source;
       lastReport = report;
-      return compactReport(report);
+
+      const remaining = Math.max(0, queue.length - consumed);
+      return {
+        ...compactReport(report),
+        progress: {
+          checked: consumed,
+          total: queue.length,
+          remaining,
+          nextOffset: remaining > 0 ? consumed : null,
+          note:
+            remaining > 0
+              ? `${remaining} entries not yet checked. Call verify_csv again with offset=${consumed} and the same content to continue.`
+              : "Everything in the file was checked.",
+        },
+      };
     },
   },
   {
@@ -176,7 +252,7 @@ export const TOOLS = [
         pairs: [],
       };
       const report = await verifyExtraction(extraction, {
-        client: a.offline ? null : client(),
+        client: a.offline ? null : client_(),
         allow: a.allow ?? [],
         deep: Boolean(a.deep),
       });
@@ -214,8 +290,7 @@ export const TOOLS = [
         pairs: a.asAnswers ? a.ips.map((i) => ({ host: "supplied.answer", ip: String(i), count: 1 })) : [],
       };
       const report = await verifyExtraction(extraction, {
-        client: a.offline ? null : client(),
-        limitIPs: a.limitIPs ?? 0,
+        client: a.offline ? null : client_(),
       });
       report.source = "explicit address list";
       lastReport = report;
@@ -240,7 +315,7 @@ export const TOOLS = [
       required: ["q"],
     },
     async handler({ q, size = 20, datasource = "scans" }) {
-      const r = await client().search(q, { size, datasource });
+      const r = await client_().search(q, { size, datasource });
       return {
         total: r.total,
         returned: r.results.length,
@@ -284,7 +359,7 @@ export const TOOLS = [
       required: ["uuid"],
     },
     async handler({ uuid, full = false }) {
-      const { data } = await client().result(uuid);
+      const { data } = await client_().result(uuid);
       if (full) return data;
       const p = data.page || {};
       const lists = data.lists || {};
@@ -340,7 +415,7 @@ export const TOOLS = [
       required: ["url"],
     },
     async handler({ url, visibility = "unlisted", tags, wait = false }) {
-      const c = client();
+      const c = client_();
       if (!wait) {
         const r = await c.scan(url, { visibility, tags });
         return { uuid: r.uuid, result: r.result, api: r.api, visibility, note: "Poll urlscan_result in about 30 seconds." };
@@ -357,58 +432,65 @@ export const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: { type: "object", properties: {} },
     async handler() {
-      return await client().quotas();
+      return await client_().quotas();
     },
   },
   {
     name: "export_blocklist",
     description:
-      "Turn the last verification into router-ready files: a dnsmasq blocking config, a hosts file, an " +
+      "Turn a set of flagged names into router-ready files: a dnsmasq blocking config, a hosts file, an " +
       "OpenWrt dnsmasq→nftables set (and the older ipset form), an nftables address set, and a policy " +
-      "stanza for the OpenWrt pbr package. Writes them to a directory and reports what was written.",
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      "stanza for the OpenWrt pbr package. " +
+      "Pass the domains explicitly — normally the ones a verify_* call came back `critical` on, minus " +
+      "anything the user has said is fine. Never include names that came back `unknown`: that verdict " +
+      "means nobody has scanned them, not that they are hostile." +
+      (local ? " Writes the files into `dir` and reports what was written." : " Returns the file contents for the user to save."),
+    annotations: { readOnlyHint: !local, destructiveHint: false, idempotentHint: true },
     inputSchema: {
       type: "object",
       properties: {
-        dir: { type: "string", default: "urlscan-verify-export", description: "Directory to write into." },
-        severities: {
-          type: "array",
-          items: { type: "string", enum: ["critical", "warning", "notice"] },
-          default: ["critical"],
-          description: "Which verdicts to include. Blocking on `notice` will break working services.",
-        },
+        domains: { type: "array", items: { type: "string" }, description: "Hostnames to block." },
+        addresses: { type: "array", items: { type: "string" }, description: "Optional addresses for the nftables set." },
+        ...(local ? { dir: { type: "string", default: "urlscan-verify-export", description: "Directory to write into." } } : {}),
         setName: { type: "string", default: "urlscan_verify", description: "nftables/ipset set name." },
         interface: { type: "string", default: "wan", description: "Interface for the generated pbr policy." },
       },
-      required: [],
+      required: ["domains"],
     },
     async handler(a) {
-      if (!lastReport) throw new Error("Nothing to export — run verify_csv or verify_domains first.");
-      const dir = path.resolve(a.dir || "urlscan-verify-export");
-      const files = buildExports(lastReport, {
-        severities: a.severities ?? ["critical"],
+      const domains = (a.domains || []).map((d) => String(d).trim()).filter(Boolean);
+      if (!domains.length) throw new Error("Give at least one domain in `domains`.");
+
+      // buildExports selects by verdict, so present the supplied names as an
+      // already-decided list rather than re-deriving one.
+      const synthetic = {
+        generatedAt: new Date().toISOString(),
+        source: "explicit list",
+        hosts: domains.map((host) => ({ host, severity: "critical" })),
+        ips: (a.addresses || []).map((ip) => ({ ip: String(ip).trim(), severity: "critical", routable: true })),
+      };
+      const files = buildExports(synthetic, {
+        severities: ["critical"],
         setName: a.setName,
-        source: lastReport.source,
+        source: "explicit list",
         interface: a.interface,
       });
+
+      const warning =
+        "Review the list before deploying. These verdicts are urlscan submitter tags plus structural " +
+        "analysis, not an audited feed — every false positive is a name the network can no longer reach.";
+
+      if (!local) return { files, domains: domains.length, addresses: synthetic.ips.length, warning };
+
+      const dir = path.resolve(a.dir || "urlscan-verify-export");
       fs.mkdirSync(dir, { recursive: true });
       for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), body);
-      const counts = {
-        hostnames: (files["domains.txt"].match(/^[^#\n].*$/gm) || []).length,
-      };
-      return {
-        dir,
-        files: Object.keys(files),
-        included: a.severities ?? ["critical"],
-        ...counts,
-        warning:
-          "Review domains.txt before deploying. These verdicts are urlscan submitter tags plus structural " +
-          "analysis, not an audited feed — every false positive is a name the network can no longer reach.",
-      };
+      return { dir, files: Object.keys(files), domains: domains.length, addresses: synthetic.ips.length, warning };
     },
   },
   {
     name: "verification_report",
+    localOnly: true,
     description:
       "The last verification rendered as a Markdown report, ready to save or paste. Run a verify_* tool first.",
     annotations: { readOnlyHint: true },
@@ -429,8 +511,13 @@ export const TOOLS = [
       return { markdown: md };
     },
   },
-];
+  ];
 
+  return local ? TOOLS : TOOLS.filter((t) => !t.localOnly);
+}
+
+/** The stdio server's tool set. */
+export const TOOLS = createTools({ local: true });
 const TOOL_MAP = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 
 // ---------------------------------------------------------------- protocol
@@ -438,8 +525,15 @@ const TOOL_MAP = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 const ok = (id, result) => ({ jsonrpc: "2.0", id, result });
 const err = (id, code, message) => ({ jsonrpc: "2.0", id, error: { code, message } });
 
-async function handleMessage(msg) {
+/**
+ * Handle one JSON-RPC message against a tool set.
+ *
+ * Exported so the HTTP endpoint can serve the same protocol without a second
+ * implementation — the transports differ, the semantics must not.
+ */
+export async function handleMessage(msg, tools = TOOL_MAP) {
   const { id, method, params } = msg || {};
+  const toolMap = Array.isArray(tools) ? Object.fromEntries(tools.map((t) => [t.name, t])) : tools;
 
   switch (method) {
     case "initialize": {
@@ -454,7 +548,7 @@ async function handleMessage(msg) {
       return ok(id, {});
     case "tools/list":
       return ok(id, {
-        tools: TOOLS.map(({ name, description, inputSchema, annotations }) => ({
+        tools: Object.values(toolMap).map(({ name, description, inputSchema, annotations }) => ({
           name,
           description,
           inputSchema,
@@ -462,7 +556,7 @@ async function handleMessage(msg) {
         })),
       });
     case "tools/call": {
-      const tool = TOOL_MAP[params?.name];
+      const tool = toolMap[params?.name];
       if (!tool) return err(id, -32602, `Unknown tool: ${params?.name}`);
       try {
         const out = await tool.handler(params.arguments || {});
@@ -500,7 +594,9 @@ export async function runMcpServer({ input = process.stdin, output = process.std
         return;
       }
       const batch = Array.isArray(msg) ? msg : [msg];
-      const out = (await Promise.all(batch.map(handleMessage))).filter(Boolean);
+      // Note the arrow: passing handleMessage to map directly would hand it the
+      // array index as its `tools` argument and serve an empty tool set.
+      const out = (await Promise.all(batch.map((m) => handleMessage(m, TOOL_MAP)))).filter(Boolean);
       if (!out.length) return;
       output.write(JSON.stringify(Array.isArray(msg) ? out : out[0]) + "\n");
     });

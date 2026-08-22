@@ -1,8 +1,13 @@
 /* urlscan-verify — browser side.
  *
- * Deliberately plain: no build step, no framework, no CDN. This page is served
- * by a local process that holds an API key, and every dependency it does not
- * have is one fewer thing that can reach the network from here.
+ * Deliberately plain: no build step, no framework, no CDN. The same page is
+ * served by the local process and by the hosted build, and it adapts to which
+ * one it is talking to by asking /api/status what that deployment can do.
+ *
+ * Verification is driven from here, a batch at a time. That is what lets a run
+ * of several hundred names survive a serverless function timeout, resume after
+ * a rate limit, and show results as they arrive rather than after a long blank
+ * wait. See the note in src/api.mjs for the reasoning.
  */
 "use strict";
 
@@ -29,12 +34,14 @@ const LABEL = {
   unknown: "No evidence",
 };
 
+let STATUS = null;
 let CSV_TEXT = "";
 let CSV_NAME = "";
-let ANALYSIS = null;
+let EXTRACTION = null;
 let REPORT = null;
 let FILTER_SEV = null;
-let controller = null;
+let RUNNING = false;
+let STOP = false;
 
 // ------------------------------------------------------------------- key
 
@@ -42,12 +49,18 @@ async function refreshStatus() {
   const box = $("#keystate");
   try {
     const s = await (await fetch("/api/status")).json();
+    STATUS = s;
     box.innerHTML = "";
     box.appendChild(el("span", "dot " + (s.keyConfigured ? "on" : "off")));
-    box.appendChild(
-      el("span", null, s.keyConfigured ? `key ${s.keyMasked} (${s.keySource})` : "no API key")
-    );
+    box.appendChild(el("span", null, s.keyConfigured ? `key ${s.keyMasked}` : "no API key"));
+
+    // A hosted deployment reads its key from the environment and cannot store
+    // one, so the whole card would be a dead end. Explain instead of offering it.
     $("#cardKey").classList.toggle("hide", s.keyConfigured);
+    $("#keyForm").classList.toggle("hide", !s.canStoreKey);
+    $("#keyHosted").classList.toggle("hide", s.canStoreKey);
+    $("#saveRow").classList.toggle("hide", !s.canWriteFiles);
+    $("#downloadRow").classList.toggle("hide", Boolean(s.canWriteFiles));
     return s;
   } catch {
     box.textContent = "server unreachable";
@@ -131,13 +144,17 @@ function loadFile(file) {
   fr.readAsText(file);
 }
 
-async function analyze() {
+async function analyze(overrides) {
   msg("#analyzeMsg", "", "Reading…");
   try {
-    const r = await fetch("/api/analyze", { method: "POST", body: CSV_TEXT });
+    const r = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ csv: CSV_TEXT, ...overrides }),
+    });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "could not parse that file");
-    ANALYSIS = d;
+    EXTRACTION = d;
     renderPreview(d);
     msg("#analyzeMsg", "", "");
   } catch (e) {
@@ -157,12 +174,13 @@ function renderPreview(d) {
     if (sub) box.appendChild(el("s", null, sub));
     facts.appendChild(box);
   };
+  const est = Math.round(((d.uniqueHosts + d.uniqueIPs) * (STATUS?.pacingMs || 900)) / 1000);
   fact("Rows", d.rowCount.toLocaleString(), CSV_NAME);
-  fact("Hostnames", d.uniqueHosts.toLocaleString(), d.hosts.slice(0, 3).join(", "));
-  fact("Addresses", d.uniqueIPs.toLocaleString(), d.ips.slice(0, 3).join(", "));
-  fact("Name→address pairs", d.pairs.toLocaleString(), d.pairs ? "cross-checkable" : "none on the same row");
+  fact("Hostnames", d.uniqueHosts.toLocaleString(), d.hosts.slice(0, 3).map((h) => h.host).join(", "));
+  fact("Addresses", d.uniqueIPs.toLocaleString(), d.ips.slice(0, 3).map((i) => i.ip).join(", "));
+  fact("Est. time", est > 90 ? `${Math.round(est / 60)} min` : `${est}s`, "one lookup per unique name");
 
-  const fill = (sel, cols, chosen) => {
+  const fill = (sel, chosen) => {
     const s = $(sel);
     s.innerHTML = "";
     d.columns.headers.forEach((h, i) => {
@@ -173,112 +191,153 @@ function renderPreview(d) {
     });
     s.size = Math.min(6, Math.max(3, d.columns.headers.length));
   };
-  fill("#hostCol", d.columns.hostCols, d.columns.hostCols.map((c) => c.index));
-  fill("#ipCol", d.columns.ipCols, d.columns.ipCols.map((c) => c.index));
+  fill("#hostCol", d.columns.hostCols.map((c) => c.index));
+  fill("#ipCol", d.columns.ipCols.map((c) => c.index));
 
   if (!d.uniqueHosts && !d.uniqueIPs) {
-    msg("#analyzeMsg", "err", "No hostnames or addresses found. Pick the right columns above and try again.");
+    msg("#analyzeMsg", "err", "No hostnames or addresses found. Pick the right columns above and press Re-read.");
   }
 }
 
 const chosen = (sel) => [...$(sel).selectedOptions].map((o) => Number(o.value));
+
+$("#recolumn").onclick = () =>
+  analyze({ hostColumns: chosen("#hostCol"), ipColumns: chosen("#ipCol") });
 
 // ------------------------------------------------------------------- run
 
 $("#run").onclick = () => run(false);
 $("#runOffline").onclick = () => run(true);
 $("#stop").onclick = () => {
-  if (controller) controller.abort();
+  STOP = true;
+  $("#stop").textContent = "Stopping…";
 };
 
+/**
+ * Drive the batch loop.
+ *
+ * Records accumulate here and are only assembled into a report at the end, so
+ * stopping early — by choice or by rate limit — still yields a usable report of
+ * everything checked so far.
+ */
 async function run(offline) {
-  if (!CSV_TEXT) return msg("#analyzeMsg", "err", "Load a CSV first.");
+  if (!EXTRACTION) return msg("#analyzeMsg", "err", "Load a CSV first.");
+  if (RUNNING) return;
   const status = await refreshStatus();
   if (!offline && status && !status.keyConfigured) {
-    return msg("#analyzeMsg", "err", "No API key configured. Add one above, or use structure checks only.");
+    return msg("#analyzeMsg", "err", "No API key configured. " + (status.canStoreKey ? "Add one above" : "Set URLSCAN_API_KEY on the deployment") + ", or use structure checks only.");
   }
 
+  const limit = Number($("#limit").value) || 0;
+  const hostQueue = limit > 0 ? EXTRACTION.hosts.slice(0, limit) : EXTRACTION.hosts.slice();
+  const ipQueue = EXTRACTION.ips.slice();
+  const total = hostQueue.length + ipQueue.length;
+  if (!total) return msg("#analyzeMsg", "err", "Nothing to check in that file.");
+
+  // Small batches offline are pointless overhead; online they are what makes
+  // progress visible and a timeout survivable.
+  const maxBatch = Math.max(1, Math.min(STATUS?.maxBatch || 25, offline ? 25 : 5));
+
+  RUNNING = true;
+  STOP = false;
   $("#cardRun").classList.remove("hide");
-  $("#cardResults").classList.add("hide");
-  $("#spin").classList.remove("hide");
-  $("#barFill").style.width = "0%";
-  $("#progCur").textContent = "";
+  $("#stop").textContent = "Stop";
   $("#run").disabled = true;
   $("#runOffline").disabled = true;
+  msg("#analyzeMsg", "", "");
 
-  controller = new AbortController();
+  const hosts = [];
+  const ips = [];
+  let api = null;
+  let stoppedEarly = false;
+  let done = 0;
+
+  const opts = {
+    offline,
+    allow: $("#allow").value.split(",").map((s) => s.trim()).filter(Boolean),
+    deep: $("#deep").checked,
+    answerIPs: EXTRACTION.answerIPs || [],
+  };
+
   try {
-    const res = await fetch("/api/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
-        csv: CSV_TEXT,
-        filename: CSV_NAME,
-        offline,
-        hostColumns: chosen("#hostCol"),
-        ipColumns: chosen("#ipCol"),
-        limitHosts: Number($("#limit").value) || 0,
-        deep: $("#deep").checked,
-        allow: $("#allow").value.split(",").map((s) => s.trim()).filter(Boolean),
-      }),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      throw new Error(d.error || `server returned ${res.status}`);
+    while ((hostQueue.length || ipQueue.length) && !STOP) {
+      const batchHosts = hostQueue.splice(0, maxBatch);
+      const room = maxBatch - batchHosts.length;
+      const batchIPs = room > 0 ? ipQueue.splice(0, room) : [];
+
+      const r = await fetch("/api/verify-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...opts, hosts: batchHosts, ips: batchIPs }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `server returned ${r.status}`);
+
+      hosts.push(...d.hosts);
+      ips.push(...d.ips);
+      if (d.api) api = d.api;
+      done += d.hosts.length + d.ips.length;
+
+      const pct = (done / total) * 100;
+      $("#barFill").style.width = pct.toFixed(1) + "%";
+      $("#progNow").textContent = `${done} / ${total}`;
+      const last = [...d.hosts, ...d.ips].slice(-1)[0];
+      $("#progCur").textContent = last ? (last.host || last.ip) : "";
+
+      // Show results as they land rather than after a long blank wait.
+      REPORT = await finalize(hosts, ips, api, false);
+      renderReport(REPORT);
+
+      if (d.rateLimited) {
+        stoppedEarly = true;
+        msg("#analyzeMsg", "warn", "urlscan's rate limit was reached, so the run stopped here. Everything checked is cached — press Verify again in a minute and it will pick up where it left off.");
+        break;
+      }
     }
-    await consumeStream(res.body);
+
+    if (STOP) {
+      msg("#analyzeMsg", "warn", `Stopped at ${done} of ${total}. Everything checked is cached, so continuing is cheap.`);
+    }
+    REPORT = await finalize(hosts, ips, api, stoppedEarly);
+    renderReport(REPORT);
   } catch (e) {
-    if (e.name === "AbortError") {
-      msg("#analyzeMsg", "warn", "Stopped. Anything already looked up is cached, so re-running picks up cheaply.");
-    } else {
-      msg("#analyzeMsg", "err", e.message);
-    }
+    msg("#analyzeMsg", "err", e.message);
   } finally {
-    controller = null;
-    $("#spin").classList.add("hide");
+    RUNNING = false;
+    $("#cardRun").classList.add("hide");
     $("#run").disabled = false;
     $("#runOffline").disabled = false;
   }
 }
 
-/** Read the NDJSON progress stream the server writes while it works. */
-async function consumeStream(body) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const lines = buf.split("\n");
-    buf = lines.pop();
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      let ev;
-      try {
-        ev = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      handleEvent(ev);
-    }
-  }
-}
-
-function handleEvent(ev) {
-  if (ev.type === "progress") {
-    const pct = ev.total ? (ev.done / ev.total) * 100 : 0;
-    $("#barFill").style.width = pct.toFixed(1) + "%";
-    $("#progNow").textContent = `${ev.done} / ${ev.total}`;
-    $("#progCur").textContent = ev.current;
-  } else if (ev.type === "done") {
-    REPORT = ev.report;
-    $("#cardRun").classList.add("hide");
-    renderReport(REPORT);
-  } else if (ev.type === "error") {
-    msg("#analyzeMsg", "err", ev.error);
-  }
+async function finalize(hosts, ips, api, stoppedEarly) {
+  const r = await fetch("/api/finalize", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      hosts,
+      ips,
+      pairs: EXTRACTION.pairs,
+      api,
+      stoppedEarly,
+      filename: CSV_NAME,
+      scope: {
+        rowCount: EXTRACTION.rowCount,
+        uniqueHosts: EXTRACTION.uniqueHosts,
+        uniqueIPs: EXTRACTION.uniqueIPs,
+        hostsChecked: hosts.length,
+        ipsChecked: ips.length,
+        pairsChecked: EXTRACTION.pairs.length,
+        columns: {
+          hosts: EXTRACTION.columns.hostCols.map((c) => c.header),
+          ips: EXTRACTION.columns.ipCols.map((c) => c.header + (c.role === "source" ? " (source)" : "")),
+        },
+      },
+    }),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "could not assemble the report");
+  return d;
 }
 
 // --------------------------------------------------------------- results
@@ -287,11 +346,11 @@ function renderReport(report) {
   $("#cardResults").classList.remove("hide");
   const s = report.scope;
   $("#resultSub").textContent =
-    `${s.rowCount.toLocaleString()} rows · ${s.hostsChecked} hostnames and ${s.ipsChecked} addresses checked · ` +
-    (report.api.offline
+    `${(s.rowCount || 0).toLocaleString()} rows · ${s.hostsChecked} hostnames and ${s.ipsChecked} addresses checked · ` +
+    (report.api?.offline
       ? "structure checks only, urlscan was not contacted"
-      : `${report.api.calls} urlscan calls, ${report.api.cacheHits} from cache`) +
-    (report.stoppedEarly ? " · stopped early on a rate limit — re-run to continue" : "");
+      : `${report.api?.calls ?? 0} urlscan calls, ${report.api?.cacheHits ?? 0} from cache`) +
+    (report.stoppedEarly ? " · stopped early on a rate limit" : "");
 
   const board = $("#scoreboard");
   board.innerHTML = "";
@@ -326,31 +385,40 @@ function renderRows() {
   for (const r of rows) {
     const name = r.host || r.ip;
     const tr = el("tr");
-    const td = (child, cls) => {
+    tr.tabIndex = 0;
+    // data-label drives the stacked card layout on narrow screens, where the
+    // header row is hidden and each cell has to name itself.
+    const td = (child, cls, label) => {
       const c = el("td", cls);
+      if (label) c.dataset.label = label;
       if (typeof child === "string" || typeof child === "number") c.textContent = child;
       else if (child) c.appendChild(child);
       tr.appendChild(c);
       return c;
     };
-    td(el("span", "tag " + r.severity, LABEL[r.severity]));
-    td(name, "name");
-    td(r.count ?? "", "num");
-    td(r.scans ?? "", "num");
+    td(el("span", "tag " + r.severity, LABEL[r.severity]), "verdict", "");
+    td(name, "name", "Name");
+    td(r.count ?? "", "num", "Rows");
+    td(r.scans ?? "", "num", "Scans");
     const asns = (r.evidence?.asns || []).map((a) => a.name || a.asn).slice(0, 2).join(", ");
-    td(asns || (r.special ? r.special : ""), "");
+    td(asns || r.special || "", "", "Network");
     const why = r.signals.filter((x) => x.weight > 0).map((x) => x.id).join(", ");
-    td(why || (r.signals[0] ? r.signals[0].id : ""), "");
+    td(why || (r.signals[0] ? r.signals[0].id : ""), "why", "Why");
 
-    let open = false;
-    tr.onclick = () => {
-      if (open) {
-        tr.nextSibling?.remove();
-        open = false;
+    const toggle = () => {
+      const next = tr.nextElementSibling;
+      if (next && next.classList.contains("detail")) {
+        next.remove();
         return;
       }
       tr.after(detailRow(r));
-      open = true;
+    };
+    tr.onclick = toggle;
+    tr.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggle();
+      }
     };
     tb.appendChild(tr);
   }
@@ -369,9 +437,7 @@ function detailRow(r) {
   td.colSpan = 6;
 
   const list = el("ul");
-  for (const s of r.signals) {
-    list.appendChild(el("li", null, s.detail));
-  }
+  for (const s of r.signals) list.appendChild(el("li", null, s.detail));
   if (!r.signals.length) list.appendChild(el("li", null, "No signals — nothing about this name or address stood out."));
   td.appendChild(list);
 
@@ -422,41 +488,52 @@ function download(name, body, type) {
 
 const stamp = () => new Date().toISOString().slice(0, 10);
 
+const postExport = (body) =>
+  fetch("/api/export", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ report: REPORT, ...body }),
+  });
+
 $("#expJson").onclick = () => REPORT && download(`urlscan-verify-${stamp()}.json`, JSON.stringify(REPORT, null, 2), "application/json");
 $("#expCsv").onclick = async () => {
-  const r = await fetch("/api/export", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ format: "csv" }),
-  });
-  download(`urlscan-verify-${stamp()}.csv`, await r.text(), "text/csv");
+  if (!REPORT) return;
+  download(`urlscan-verify-${stamp()}.csv`, await (await postExport({ format: "csv" })).text(), "text/csv");
 };
 $("#expMd").onclick = async () => {
-  const r = await fetch("/api/export", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ format: "markdown" }),
-  });
-  download(`urlscan-verify-${stamp()}.md`, await r.text(), "text/markdown");
+  if (!REPORT) return;
+  download(`urlscan-verify-${stamp()}.md`, await (await postExport({ format: "markdown" })).text(), "text/markdown");
 };
-
 $("#expBlock").onclick = () => $("#blockPanel").classList.toggle("hide");
 
+const blockOpts = () => ({
+  severities: [...document.querySelectorAll(".bsev:checked")].map((c) => c.value),
+  setName: $("#setName").value.trim() || "urlscan_verify",
+  interface: $("#pbrIface").value.trim() || "wan",
+});
+
+$("#doDownload").onclick = async () => {
+  if (!REPORT) return;
+  const o = blockOpts();
+  if (!o.severities.length) return msg("#blockMsg", "err", "Pick at least one verdict to include.");
+  const r = await postExport({ format: "blocklist", ...o });
+  const d = await r.json();
+  if (!r.ok) return msg("#blockMsg", "err", d.error);
+  for (const [name, content] of Object.entries(d.files)) download(name, content, "text/plain");
+  msg("#blockMsg", "ok", `Downloaded ${Object.keys(d.files).length} files. Your browser may ask to allow multiple downloads.`);
+};
+
 $("#doSave").onclick = async () => {
-  const severities = [...document.querySelectorAll(".bsev:checked")].map((c) => c.value);
-  if (!severities.length) return msg("#blockMsg", "err", "Pick at least one verdict to include.");
+  if (!REPORT) return;
+  const o = blockOpts();
+  if (!o.severities.length) return msg("#blockMsg", "err", "Pick at least one verdict to include.");
   const btn = $("#doSave");
   btn.disabled = true;
   try {
     const r = await fetch("/api/export/save", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        severities,
-        setName: $("#setName").value.trim() || "urlscan_verify",
-        interface: $("#pbrIface").value.trim() || "wan",
-        dir: $("#saveDir").value.trim() || "urlscan-verify-export",
-      }),
+      body: JSON.stringify({ report: REPORT, ...o, dir: $("#saveDir").value.trim() || "urlscan-verify-export" }),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);

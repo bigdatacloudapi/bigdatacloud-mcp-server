@@ -1,0 +1,13 @@
+{
+  "name": "urlscan-verify",
+  "short_name": "verify",
+  "description": "Check the domains and IP addresses in a CSV against urlscan.io",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#14172a",
+  "theme_color": "#14172a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
