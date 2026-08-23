@@ -1,48 +1,52 @@
 {
-  "name": "@bigdatacloudapi/mcp-server",
+  "name": "urlscan-verify",
   "version": "1.1.0",
-  "description": "BigDataCloud MCP Server — IP Geolocation, Reverse Geocoding, Network, Timezone, Phone/Email Validation and more for AI assistants",
-  "main": "dist/index.js",
-  "bin": {
-    "bigdatacloud-mcp-server": "dist/index.js"
-  },
+  "description": "Verify the domains and IPs in a CSV against urlscan.io \u2014 CLI, local web app, and an MCP server for Claude Code.",
   "type": "module",
+  "private": false,
+  "license": "MIT",
+  "bin": {
+    "urlscan-verify": "bin/urlscan-verify.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "api",
+    "public",
+    "vercel.json",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js"
+    "start": "node bin/urlscan-verify.mjs serve",
+    "verify": "node bin/urlscan-verify.mjs verify",
+    "mcp": "node bin/urlscan-verify.mjs mcp",
+    "test": "node --test test/*.test.mjs"
   },
   "keywords": [
+    "urlscan",
+    "threat-intel",
+    "dns",
+    "csv",
+    "domain-verification",
+    "ip-reputation",
+    "openwrt",
+    "pbr",
+    "blocklist",
     "mcp",
-    "model-context-protocol",
-    "bigdatacloud",
-    "ip-geolocation",
-    "geolocation",
-    "reverse-geocoding",
-    "ip-address",
-    "geoip",
-    "asn",
-    "timezone",
-    "ai-tools",
-    "claude",
-    "llm"
+    "claude-code",
+    "vercel",
+    "remote-mcp",
+    "oauth",
+    "pwa"
   ],
-  "author": "BigDataCloud Pty Ltd",
-  "license": "MIT",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "dependencies": {},
+  "devDependencies": {},
   "repository": {
     "type": "git",
-    "url": "https://github.com/bigdatacloudapi/bigdatacloud-mcp-server"
-  },
-  "homepage": "https://www.bigdatacloud.com",
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "zod": "^3.23.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
-  },
-  "engines": {
-    "node": ">=18"
+    "url": "git+https://github.com/demonad112/bigdatacloud-mcp-server.git"
   }
 }

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "urlscan-verify": {
+      "command": "node",
+      "args": ["bin/urlscan-verify.mjs", "mcp"],
+      "env": {}
+    }
+  }
+}
