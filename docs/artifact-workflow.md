@@ -1,7 +1,12 @@
 # The two boards, and how to run them
 
-**Resolver Triage** — https://claude.ai/code/artifact/c7e3cb44-06b8-4327-b3b3-eda4d934d4a9
-**Verdict Board** — https://claude.ai/code/artifact/86911d70-2f6f-4616-959d-383dae22d473
+**Resolver Triage** — published from `artifacts/resolver-triage.html`
+**Verdict Board** — published from `artifacts/verdict-board.html`
+
+Publish each source file as a Claude Artifact and keep your own two links; the
+URLs are per-account, so there is no shared address to put here. The triage
+console needs the `downloads` capability, the verdict board needs `artifact`
+and `downloads`.
 
 Both work on Windows, on your phone, and in any browser. Nothing to install,
 nothing hosted, no API key anywhere.
