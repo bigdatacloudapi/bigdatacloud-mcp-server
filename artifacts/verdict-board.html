@@ -1,0 +1,959 @@
+<title>Verdict Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style id="app-style">
+:root {
+  --ground: #EEF1F2;
+  --panel: #FFFFFF;
+  --panel-2: #F6F8F9;
+  --ink: #0F1518;
+  --muted: #586268;
+  --rule: #D2D9DC;
+  --rule-strong: #B8C2C7;
+  --accent: #4B45C6;
+  --accent-soft: #E6E5FA;
+  --sev-critical: #B3261E;
+  --sev-warning: #8A5300;
+  --sev-notice: #186566;
+  --sev-unknown: #68737A;
+  --dec-block: #B3261E;
+  --dec-allow: #1B6B3F;
+  --dec-look: #8A5300;
+  --on-dec: #FFFFFF;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0D1215;
+    --panel: #151C20;
+    --panel-2: #1B2429;
+    --ink: #E3E9EC;
+    --muted: #8F9CA3;
+    --rule: #252F35;
+    --rule-strong: #35424A;
+    --accent: #9E97FF;
+    --accent-soft: #241F52;
+    --sev-critical: #FF7063;
+    --sev-warning: #E3A93C;
+    --sev-notice: #4CC8CA;
+    --sev-unknown: #8A959B;
+    --dec-block: #FF7063;
+    --dec-allow: #5FCB86;
+    --dec-look: #E3A93C;
+    --on-dec: #10171A;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0D1215;
+  --panel: #151C20;
+  --panel-2: #1B2429;
+  --ink: #E3E9EC;
+  --muted: #8F9CA3;
+  --rule: #252F35;
+  --rule-strong: #35424A;
+  --accent: #9E97FF;
+  --accent-soft: #241F52;
+  --sev-critical: #FF7063;
+  --sev-warning: #E3A93C;
+  --sev-notice: #4CC8CA;
+  --sev-unknown: #8A959B;
+  --dec-block: #FF7063;
+  --dec-allow: #5FCB86;
+  --dec-look: #E3A93C;
+  --on-dec: #10171A;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:where(button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+.wrap { max-width: 1000px; margin: 0 auto; padding: 0 16px 110px; }
+
+/* ---------- masthead ---------- */
+.masthead { border-bottom: 1px solid var(--rule); background: var(--panel); }
+.masthead-in {
+  max-width: 1000px; margin: 0 auto; padding: 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap;
+}
+.mast-l { display: flex; flex-direction: column; gap: 1px; }
+h1 { font-size: 19px; font-weight: 700; letter-spacing: -.015em; margin: 0; }
+.tagline { color: var(--muted); font-size: 13px; margin: 0; }
+.pending { display: flex; align-items: baseline; gap: 8px; }
+.pending-n {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 30px; font-weight: 600; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--sev-warning);
+}
+.pending-n.done { color: var(--dec-allow); }
+.pending-l { font-size: 12.5px; color: var(--muted); max-width: 12ch; line-height: 1.25; }
+
+/* ---------- panels ---------- */
+.panel { background: var(--panel); border: 1px solid var(--rule); margin-top: 18px; }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 14px; border-bottom: 1px solid var(--rule); background: var(--panel-2);
+}
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); margin: 0;
+}
+.panel-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.panel-body > p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 66ch; }
+
+textarea {
+  width: 100%; min-height: 150px; resize: vertical; padding: 10px 11px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12.5px; line-height: 1.5;
+  color: var(--ink); background: var(--panel); border: 1px solid var(--rule);
+}
+textarea::placeholder { color: var(--muted); opacity: .85; }
+
+.btn {
+  font-family: inherit; font-size: 13.5px; font-weight: 600;
+  padding: 8px 14px; border: 1px solid var(--rule-strong);
+  background: var(--panel); color: var(--ink); cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover { background: var(--panel-2); border-color: var(--muted); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn-primary { color: #12101F; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-primary { color: #12101F; }
+}
+.btn-primary:hover { filter: brightness(1.08); background: var(--accent); border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+select {
+  font-family: inherit; font-size: 13.5px; padding: 8px 10px;
+  border: 1px solid var(--rule-strong); background: var(--panel); color: var(--ink);
+}
+
+/* ---------- filters ---------- */
+.filters {
+  display: flex; gap: 0; flex-wrap: wrap; margin-top: 18px;
+  border: 1px solid var(--rule); background: var(--panel);
+}
+.chip {
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  padding: 9px 14px; background: transparent; color: var(--muted);
+  border: 0; border-right: 1px solid var(--rule); cursor: pointer;
+  display: flex; align-items: baseline; gap: 7px;
+  border-bottom: 2px solid transparent;
+}
+.chip:last-child { border-right: 0; }
+.chip:hover { background: var(--panel-2); color: var(--ink); }
+.chip[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); background: var(--panel-2); }
+.chip b {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-weight: 600; font-variant-numeric: tabular-nums; font-size: 12px;
+}
+
+/* ---------- cards ---------- */
+.board { border: 1px solid var(--rule); border-top: 0; background: var(--panel); }
+.card { border-bottom: 1px solid var(--rule); padding: 13px 14px; display: flex; flex-direction: column; gap: 9px; }
+.card:last-child { border-bottom: 0; }
+/* A settled name recedes, but only its text — dimming the whole card would
+   take the decision control's contrast down with it. */
+.card[data-decision="allow"] .card-name { color: var(--muted); }
+.card-top { display: flex; align-items: flex-start; gap: 10px; }
+.glyph {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px; font-weight: 600; white-space: pre; padding-top: 2px;
+}
+.card[data-sev="critical"] .glyph { color: var(--sev-critical); }
+.card[data-sev="warning"]  .glyph { color: var(--sev-warning); }
+.card[data-sev="notice"]   .glyph { color: var(--sev-notice); }
+.card[data-sev="unknown"]  .glyph,
+.card[data-sev="unsorted"] .glyph { color: var(--sev-unknown); }
+.card-name {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13.5px; font-weight: 500; word-break: break-all; line-height: 1.4; flex: 1;
+}
+.card-score {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 2px;
+}
+.reasons { margin: 0; padding: 0 0 0 24px; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.reasons li { font-size: 13px; color: var(--muted); line-height: 1.45; padding-left: 19px; position: relative; }
+.reasons li::before { content: "—"; position: absolute; left: 0; color: var(--rule-strong); }
+
+.seg { display: flex; margin-left: 24px; border: 1px solid var(--rule-strong); width: fit-content; max-width: 100%; }
+.seg button {
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 6px 13px; background: var(--panel); color: var(--muted);
+  border: 0; border-right: 1px solid var(--rule-strong); cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.seg button:last-child { border-right: 0; }
+.seg button:hover { background: var(--panel-2); color: var(--ink); }
+.seg button[aria-pressed="true"] { color: var(--on-dec); }
+.seg button[data-d="block"][aria-pressed="true"] { background: var(--dec-block); }
+.seg button[data-d="investigate"][aria-pressed="true"] { background: var(--dec-look); }
+.seg button[data-d="allow"][aria-pressed="true"] { background: var(--dec-allow); }
+
+.group-head {
+  padding: 9px 14px; border-bottom: 1px solid var(--rule); background: var(--panel-2);
+  display: flex; align-items: baseline; gap: 9px;
+}
+.group-head .eyebrow { margin: 0; }
+.group-head span.n {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+
+/* ---------- misc ---------- */
+.empty { padding: 34px 18px; text-align: center; }
+.empty p { margin: 0 auto; max-width: 48ch; color: var(--muted); font-size: 14px; }
+.err {
+  padding: 11px 13px; font-size: 13.5px; color: var(--sev-critical);
+  background: var(--panel-2); border: 1px solid var(--sev-critical);
+}
+.note-strip {
+  margin-top: 18px; padding: 12px 14px; background: var(--panel);
+  border: 1px solid var(--rule); border-left: 3px solid var(--rule-strong);
+}
+.note-strip p { margin: 0; font-size: 13px; color: var(--muted); max-width: 68ch; }
+.note-strip strong { color: var(--ink); font-weight: 600; }
+.save-state { font-size: 12.5px; color: var(--muted); }
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(8px);
+  background: var(--ink); color: var(--ground); padding: 9px 16px;
+  font-size: 13.5px; font-weight: 500; opacity: 0; pointer-events: none;
+  transition: opacity .18s, transform .18s; z-index: 50;
+  max-width: calc(100vw - 32px); text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.hidden { display: none !important; }
+
+@media (max-width: 640px) {
+  .masthead-in { align-items: flex-start; }
+  .pending-n { font-size: 26px; }
+  .chip { flex: 1 1 auto; justify-content: center; }
+  .reasons, .seg { margin-left: 0; padding-left: 0; }
+  .reasons { padding-left: 0; }
+  .seg { width: 100%; }
+  .seg button { flex: 1; padding: 8px 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+
+<div id="root"></div>
+
+<script type="application/json" id="board-state">{"v":1,"items":[],"decisions":{},"updated":null}</script>
+
+<script id="app-script">
+(function () {
+"use strict";
+
+/* ===================== host / address recognition ===================== */
+
+function parseIPv4(s) {
+  var m = String(s).trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return null;
+  for (var i = 1; i <= 4; i++) {
+    if (Number(m[i]) > 255) return null;
+    if (m[i].length > 1 && m[i][0] === "0") return null;
+  }
+  return true;
+}
+function looksIPv6(s) {
+  var t = String(s).trim().toLowerCase();
+  if (t.indexOf(":") === -1) return false;
+  return /^[0-9a-f:]+(\.\d{1,3}){0,3}$/.test(t) && (t.match(/:/g) || []).length >= 2;
+}
+function isIP(s) { return !!parseIPv4(s) || looksIPv6(s); }
+
+var HOSTNAME_RE = /^[a-z0-9_-]{1,63}(\.[a-z0-9_-]{1,63})*$/;
+
+function normaliseHost(input) {
+  if (typeof input !== "string") return null;
+  var h = input.trim().toLowerCase();
+  if (!h) return null;
+  if (h.indexOf("://") !== -1) {
+    try { h = new URL(h).hostname; } catch (e) { return null; }
+  }
+  h = h.replace(/^\*\./, "").replace(/\.$/, "");
+  return h || null;
+}
+
+function isHostname(s) {
+  var h = normaliseHost(s);
+  if (!h) return false;
+  if (isIP(h)) return false;
+  if (h.indexOf(".") === -1) return false;
+  if (h.length > 253) return false;
+  if (/(^|\.)-|-(\.|$)/.test(h)) return false;
+  if (!HOSTNAME_RE.test(h)) return false;
+  // A trailing label of pure digits is an address fragment, not a TLD.
+  var last = h.split(".").pop();
+  return !/^\d+$/.test(last);
+}
+
+// Strip the punctuation a prose line wraps around a name.
+function cleanToken(t) {
+  return String(t).replace(/^[^a-z0-9]+/i, "").replace(/[^a-z0-9]+$/i, "");
+}
+
+function hostTokens(line) {
+  var out = [];
+  String(line).split(/[\s,;|]+/).forEach(function (raw) {
+    var t = cleanToken(raw);
+    if (!t) return;
+    if (isHostname(t) || isIP(t)) out.push(t.toLowerCase());
+  });
+  return out;
+}
+
+/* ============================== parsing ============================== */
+
+var SEV_HEADERS = [
+  [/^\s*[#*_\s]*(flagged|critical|hostile)\b/i, "critical"],
+  [/^\s*[#*_\s]*check\s+this\b/i, "warning"],
+  [/^\s*[#*_\s]*(worth\s+a\s+look|notice)\b/i, "notice"],
+  [/^\s*[#*_\s]*(no\s+structural\s+signal|no\s+evidence|no\s+signal)\b/i, "unknown"]
+];
+
+function severityOfHeader(line) {
+  for (var i = 0; i < SEV_HEADERS.length; i++) {
+    if (SEV_HEADERS[i][0].test(line)) return SEV_HEADERS[i][1];
+  }
+  return null;
+}
+
+// Deliberately forgiving: the input may be the triage briefing, Claude's prose
+// analysis of it, or a bare list of names. Over-capturing a stray line is a
+// far smaller failure than silently dropping a finding.
+function parseBriefing(text) {
+  var lines = String(text).split(/\r?\n/);
+  var items = [];
+  var byName = {};
+  var cur = null;
+  var sev = "unsorted";
+
+  function addItem(name, score, sevIn) {
+    var key = name.toLowerCase();
+    if (byName[key]) {
+      cur = byName[key];
+      if (score != null && cur.score == null) cur.score = score;
+      return cur;
+    }
+    var it = {
+      name: key,
+      kind: isIP(name) ? "address" : "hostname",
+      sev: sevIn || "unsorted",
+      score: score,
+      reasons: []
+    };
+    byName[key] = it;
+    items.push(it);
+    cur = it;
+    return it;
+  }
+
+  for (var i = 0; i < lines.length; i++) {
+    var raw = lines[i];
+    var line = raw.trim();
+    if (!line) { continue; }
+
+    var h = severityOfHeader(line);
+    // A header line only switches section when it isn't itself an entry.
+    if (h && !/\[score/i.test(line)) {
+      var tokensInHeader = hostTokens(line);
+      if (!tokensInHeader.length) { sev = h; cur = null; continue; }
+    }
+
+    var isBullet = /^[-*•—]\s+/.test(line);
+    var scoreMatch = line.match(/\[?\bscore\s+(\d+)\]?/i);
+    var score = scoreMatch ? Number(scoreMatch[1]) : null;
+
+    // Bullets and indented prose belong to whatever entry is open.
+    if (cur && (isBullet || /^\s{2,}/.test(raw)) && !score) {
+      var reason = line.replace(/^[-*•—]\s+/, "").trim();
+      // A bullet that is nothing but a bare name starts a new entry instead.
+      var only = hostTokens(reason);
+      if (only.length === 1 && cleanToken(reason).toLowerCase() === only[0]) {
+        addItem(only[0], null, sev);
+        continue;
+      }
+      if (reason) cur.reasons.push(reason);
+      continue;
+    }
+
+    var tokens = hostTokens(line);
+    if (!tokens.length) {
+      // Prose with no name in it: keep it on the open entry, drop it otherwise.
+      if (cur && !/^[A-Z0-9 \-—:()]+$/.test(line)) cur.reasons.push(line.replace(/^[#*_\s]+/, "").trim());
+      continue;
+    }
+
+    var firstTok = cleanToken(line.split(/[\s,;|]+/).filter(Boolean)[0].replace(/^[#*_>\s]+/, ""));
+    var startsWithName = firstTok && (isHostname(firstTok) || isIP(firstTok));
+
+    if (tokens.length >= 2 && !score && startsWithName) {
+      // A bare comma-separated roster.
+      tokens.forEach(function (t) { addItem(t, null, sev); });
+      cur = null;
+      continue;
+    }
+
+    if (startsWithName || score != null) {
+      var it = addItem(tokens[0], score, sev);
+      var trailing = line
+        .replace(tokens[0], "")
+        .replace(/\[?\bscore\s+\d+\]?/i, "")
+        .replace(/\[[^\]]*\]/g, "")
+        .replace(/^[\s\-—:,*#]+/, "")
+        .trim();
+      if (trailing && trailing.length > 3) it.reasons.push(trailing);
+      continue;
+    }
+
+    if (cur) cur.reasons.push(line.replace(/^[#*_\s]+/, "").trim());
+  }
+
+  return items;
+}
+
+/* ============================== state ============================== */
+
+var SEV_ORDER = ["critical", "warning", "notice", "unsorted", "unknown"];
+var SEV_LABEL = {
+  critical: "Flagged", warning: "Check this", notice: "Worth a look",
+  unsorted: "Unsorted", unknown: "No evidence"
+};
+var SEV_GLYPH = { critical: "!!", warning: "! ", notice: "· ", unsorted: "· ", unknown: "? " };
+var DECISIONS = [
+  { id: "block", label: "Block" },
+  { id: "investigate", label: "Investigate" },
+  { id: "allow", label: "Allow" }
+];
+var LS_KEY = "verdict-board-v1";
+
+var state = { v: 1, items: [], decisions: {}, updated: null };
+var ui = { filter: "all", canWrite: true, dirty: false };
+
+function loadState() {
+  var el = document.getElementById("board-state");
+  var published = { v: 1, items: [], decisions: {}, updated: null };
+  try {
+    var parsed = JSON.parse(el ? el.textContent : "{}");
+    if (parsed && typeof parsed === "object") {
+      published.items = Array.isArray(parsed.items) ? parsed.items : [];
+      published.decisions = parsed.decisions && typeof parsed.decisions === "object" ? parsed.decisions : {};
+      published.updated = parsed.updated || null;
+    }
+  } catch (e) { /* a corrupt block is an empty board, not a crash */ }
+
+  // Local decisions win only when they are newer — that is the "I marked
+  // things up but never pressed Save, then refreshed" case.
+  try {
+    var local = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+    if (local && local.updated && (!published.updated || local.updated > published.updated)) {
+      if (!published.items.length && Array.isArray(local.items)) published.items = local.items;
+      published.decisions = local.decisions || published.decisions;
+      published.updated = local.updated;
+      ui.dirty = true;
+    }
+  } catch (e) { /* storage can be unavailable or blocked; that is fine */ }
+
+  state = published;
+}
+
+function persistLocal() {
+  state.updated = new Date().toISOString();
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* private mode */ }
+}
+
+/* ============================== rendering ============================== */
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+var SHELL =
+  '<header class="masthead"><div class="masthead-in">' +
+    '<div class="mast-l">' +
+      '<h1>Verdict Board</h1>' +
+      '<p class="tagline">What you decided about every name, and why.</p>' +
+    '</div>' +
+    '<div class="pending"><span class="pending-n" id="pending-n">0</span>' +
+    '<span class="pending-l" id="pending-l">still undecided</span></div>' +
+  '</div></header>' +
+  '<div class="wrap">' +
+    '<section class="panel" id="intake">' +
+      '<div class="panel-head"><p class="eyebrow">Intake</p>' +
+        '<button class="btn" id="btn-toggle-intake" type="button">Hide</button></div>' +
+      '<div class="panel-body" id="intake-body">' +
+        '<p>Paste the briefing from the triage console, or Claude&rsquo;s write-up of it. ' +
+        'Headings, bullets and bare lists all parse &mdash; nothing needs reformatting first.</p>' +
+        '<textarea id="paste" spellcheck="false" placeholder="CHECK THIS (8)&#10;  paypal.com.secure-login.xyz  [score 54]&#10;    - &quot;paypal&quot; appears as a subdomain label but the registrable domain is secure-login.xyz"></textarea>' +
+        '<div class="btn-row">' +
+          '<button class="btn btn-primary" id="btn-build" type="button">Build the board</button>' +
+          '<button class="btn" id="btn-merge" type="button">Add to what is there</button>' +
+          '<button class="btn" id="btn-reset" type="button">Clear board</button>' +
+        '</div>' +
+        '<div class="err hidden" id="err"></div>' +
+      '</div>' +
+    '</section>' +
+    '<div id="board-wrap" class="hidden">' +
+      '<div class="filters" id="filters"></div>' +
+      '<div class="board" id="board"></div>' +
+      '<section class="panel">' +
+        '<div class="panel-head"><p class="eyebrow">Outputs</p>' +
+          '<span class="save-state" id="save-state"></span></div>' +
+        '<div class="panel-body">' +
+          '<p>Saving keeps these decisions with the artifact, so the board looks the ' +
+          'same on your phone as it does here. Everything marked Block goes into the export.</p>' +
+          '<div class="btn-row">' +
+            '<button class="btn btn-primary" id="btn-save" type="button">Save decisions</button>' +
+            '<select id="format" aria-label="Export format">' +
+              '<option value="domains">Plain domain list</option>' +
+              '<option value="dnsmasq">dnsmasq block config</option>' +
+              '<option value="hosts">hosts file</option>' +
+              '<option value="nftset">dnsmasq &rarr; nftables set (OpenWrt 22.03+)</option>' +
+              '<option value="pbr">OpenWrt pbr policy</option>' +
+            '</select>' +
+            '<button class="btn" id="btn-export" type="button">Export</button>' +
+          '</div>' +
+        '</div>' +
+      '</section>' +
+      '<div class="note-strip"><p><strong>Read the list before you deploy it.</strong> ' +
+      'These verdicts are structural analysis plus your judgement, not an audited threat ' +
+      'feed. Every false positive here is a name your network can no longer reach.</p></div>' +
+    '</div>' +
+    '<div class="panel empty" id="empty"><p>Nothing on the board yet. Paste a briefing above ' +
+    'and the names will appear here, grouped worst-first, each waiting on a decision.</p></div>' +
+  '</div>' +
+  '<div class="toast" id="toast" role="status" aria-live="polite"></div>';
+
+var $ = function (id) { return document.getElementById(id); };
+
+var toastTimer = null;
+function toast(msg) {
+  var t = $("toast");
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2800);
+}
+
+function undecidedCount() {
+  var n = 0;
+  state.items.forEach(function (it) { if (!state.decisions[it.name]) n++; });
+  return n;
+}
+
+function counts() {
+  var c = { all: state.items.length, undecided: 0, block: 0, investigate: 0, allow: 0 };
+  state.items.forEach(function (it) {
+    var d = state.decisions[it.name];
+    if (!d) c.undecided++; else c[d]++;
+  });
+  return c;
+}
+
+function renderPending() {
+  var n = undecidedCount();
+  var el = $("pending-n"), l = $("pending-l");
+  if (!el) return;
+  if (!state.items.length) { el.textContent = "0"; el.classList.remove("done"); l.textContent = "nothing loaded"; return; }
+  el.textContent = String(n);
+  if (n === 0) { el.classList.add("done"); l.textContent = "all decided"; }
+  else { el.classList.remove("done"); l.textContent = n === 1 ? "still undecided" : "still undecided"; }
+}
+
+function renderFilters() {
+  var c = counts();
+  var defs = [
+    ["all", "Everything", c.all],
+    ["undecided", "Undecided", c.undecided],
+    ["block", "Block", c.block],
+    ["investigate", "Investigate", c.investigate],
+    ["allow", "Allow", c.allow]
+  ];
+  $("filters").innerHTML = defs.map(function (d) {
+    return '<button class="chip" type="button" data-f="' + d[0] + '" aria-pressed="' + (ui.filter === d[0]) + '">' +
+      esc(d[1]) + ' <b>' + d[2] + '</b></button>';
+  }).join("");
+}
+
+function visibleItems() {
+  return state.items.filter(function (it) {
+    var d = state.decisions[it.name];
+    if (ui.filter === "all") return true;
+    if (ui.filter === "undecided") return !d;
+    return d === ui.filter;
+  });
+}
+
+function renderBoard() {
+  var items = visibleItems();
+  var board = $("board");
+  if (!items.length) {
+    board.innerHTML = '<div class="card"><p style="margin:0;font-size:13.5px;color:var(--muted)">' +
+      'Nothing matches this filter.</p></div>';
+    return;
+  }
+  var groups = {};
+  items.forEach(function (it) {
+    var s = SEV_ORDER.indexOf(it.sev) === -1 ? "unsorted" : it.sev;
+    (groups[s] = groups[s] || []).push(it);
+  });
+
+  var html = "";
+  SEV_ORDER.forEach(function (sev) {
+    var rows = groups[sev];
+    if (!rows || !rows.length) return;
+    html += '<div class="group-head"><p class="eyebrow">' + esc(SEV_LABEL[sev]) + '</p>' +
+      '<span class="n">' + rows.length + '</span></div>';
+    rows.forEach(function (it) {
+      var d = state.decisions[it.name] || "";
+      html += '<div class="card" data-sev="' + esc(sev) + '" data-decision="' + esc(d) + '">' +
+        '<div class="card-top">' +
+          '<span class="glyph" aria-hidden="true">' + SEV_GLYPH[sev] + '</span>' +
+          '<span class="card-name">' + esc(it.name) + '</span>' +
+          (it.score != null ? '<span class="card-score">' + it.score + '</span>' : '') +
+        '</div>';
+      if (it.reasons && it.reasons.length) {
+        html += '<ul class="reasons">';
+        it.reasons.forEach(function (r) { html += '<li>' + esc(r) + '</li>'; });
+        html += '</ul>';
+      }
+      html += '<div class="seg" role="group" aria-label="Decision for ' + esc(it.name) + '">';
+      DECISIONS.forEach(function (dec) {
+        html += '<button type="button" data-name="' + esc(it.name) + '" data-d="' + dec.id +
+          '" aria-pressed="' + (d === dec.id) + '">' + dec.label + '</button>';
+      });
+      html += '</div></div>';
+    });
+  });
+  board.innerHTML = html;
+}
+
+function renderSaveState() {
+  var el = $("save-state");
+  var btn = $("btn-save");
+  if (!el) return;
+  if (!ui.canWrite) {
+    // Don't leave a control offering something this view cannot do.
+    if (btn) { btn.disabled = true; btn.title = "This view cannot write to the artifact."; }
+    el.textContent = "Read-only view — decisions stay on this device.";
+    return;
+  }
+  if (btn && !saving) btn.disabled = false;
+  el.textContent = ui.dirty ? "Unsaved changes" : (state.updated ? "Saved" : "");
+}
+
+function render() {
+  if (!state.items.length) {
+    $("board-wrap").classList.add("hidden");
+    $("empty").classList.remove("hidden");
+  } else {
+    $("empty").classList.add("hidden");
+    $("board-wrap").classList.remove("hidden");
+    renderFilters();
+    renderBoard();
+    renderSaveState();
+  }
+  renderPending();
+}
+
+/* ============================== persistence ============================== */
+
+var FONT_HREF = "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap";
+
+// The page rebuilds itself from its own authored parts — the stylesheet and
+// this script, read as text — rather than serialising the live DOM, which
+// would bake in session state and the runtime's injected scripts.
+function renderPage(next) {
+  var css = document.getElementById("app-style");
+  var js = document.getElementById("app-script");
+  // Escaping < inside the JSON keeps a hostile-looking name in the data from
+  // closing the block early.
+  var json = JSON.stringify(next).replace(/</g, "\\u003c");
+  // Built rather than written literally: a literal closing script tag anywhere
+  // in this file would terminate the very script that carries it.
+  var close = function (tag) { return "<" + "/" + tag + ">"; };
+  return "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n" +
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n" +
+    "<title>Verdict Board" + close("title") + "\n" +
+    "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n" +
+    "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n" +
+    "<link rel=\"stylesheet\" href=\"" + FONT_HREF + "\">\n" +
+    "<style id=\"app-style\">" + (css ? css.textContent : "") + close("style") + "\n" +
+    close("head") + "\n<body>\n" +
+    "<div id=\"root\">" + close("div") + "\n" +
+    "<script type=\"application/json\" id=\"board-state\">" + json + close("script") + "\n" +
+    "<script id=\"app-script\">" + (js ? js.textContent : "") + close("script") + "\n" +
+    close("body") + "\n" + close("html");
+}
+
+var saving = false;
+function saveDecisions() {
+  if (saving) return;
+  if (!ui.canWrite) { toast("This view is read-only — decisions stay on this device."); return; }
+  saving = true;
+  var btn = $("btn-save");
+  if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+
+  state.updated = new Date().toISOString();
+  var html = renderPage(state);
+
+  claude.use("artifact").then(function (artifact) {
+    if (!artifact) throw { code: "not_granted" };
+    return artifact.publish(html);
+  }).then(function () {
+    // The view reloads onto the new version; nothing more to do here.
+    ui.dirty = false;
+  })["catch"](function (err) {
+    var code = (err && err.code) || "upstream_error";
+    if (code === "conflict") {
+      // Routine: a newer version already won and every view is reloading to it.
+      toast("Someone else saved first — reloading to their version.");
+      return;
+    }
+    if (code === "not_writer" || code === "not_granted" || code === "not_declared" ||
+        code === "capability_disabled" || code === "capability_removed" || code === "consent_required") {
+      ui.canWrite = false;
+      renderSaveState();
+      toast("This view cannot save to the artifact. Decisions are kept on this device.");
+      return;
+    }
+    if (code === "too_large") toast("The board is too large to save. Clear the names you have already dealt with.");
+    else if (code === "rate_limited") toast("Saving too often — wait a moment and try again.");
+    else toast("Saving failed. Your decisions are still here on this device.");
+  }).then(function () {
+    saving = false;
+    if (btn) { btn.disabled = false; btn.textContent = "Save decisions"; }
+    renderSaveState();
+  });
+}
+
+/* ============================== export ============================== */
+
+function blockedNames() {
+  return state.items.filter(function (it) { return state.decisions[it.name] === "block"; })
+    .map(function (it) { return it.name; });
+}
+
+function header(title, n) {
+  return [
+    "# " + title,
+    "# generated by Verdict Board on " + new Date().toISOString().slice(0, 10),
+    "# " + n + " entr" + (n === 1 ? "y" : "ies"),
+    "#",
+    "# Review before deploying. These verdicts are structural analysis plus your",
+    "# own judgement, not an audited threat feed — a false positive here becomes",
+    "# a name your network can no longer reach.",
+    ""
+  ];
+}
+
+function buildExport(kind) {
+  var hosts = blockedNames().filter(function (n) { return !isIP(n); });
+  var SET = "verdict_board";
+  if (kind === "domains") {
+    return { name: "domains.txt", body: header("plain domain list", hosts.length).concat(hosts, [""]).join("\n") };
+  }
+  if (kind === "dnsmasq") {
+    return {
+      name: "dnsmasq-block.txt",
+      body: header("dnsmasq blocking config — rename to .conf in /etc/dnsmasq.d/", hosts.length)
+        .concat(["# Every listed name and its subdomains resolve to nothing.", ""])
+        .concat(hosts.map(function (h) { return "address=/" + h + "/"; }), [""]).join("\n")
+    };
+  }
+  if (kind === "hosts") {
+    var lines = [];
+    hosts.forEach(function (h) { lines.push("0.0.0.0 " + h); lines.push(":: " + h); });
+    return { name: "hosts.txt", body: header("hosts-file blocklist", hosts.length).concat(lines, [""]).join("\n") };
+  }
+  if (kind === "nftset") {
+    return {
+      name: "dnsmasq-nftset.txt",
+      body: header('dnsmasq -> nftables set "' + SET + '" (OpenWrt 22.03+, fw4)', hosts.length).concat([
+        "# dnsmasq adds every address these names resolve to into the named set, so a",
+        "# firewall or routing rule can match the domain without knowing its addresses.",
+        "#",
+        "# Create the sets first, e.g. in /etc/nftables.d/10-verdict-board.nft:",
+        "#   set " + SET + "   { type ipv4_addr; flags interval; }",
+        "#   set " + SET + "6  { type ipv6_addr; flags interval; }",
+        "# then: /etc/init.d/dnsmasq restart",
+        ""
+      ]).concat(hosts.map(function (h) {
+        return "nftset=/" + h + "/4#inet#fw4#" + SET + ",/" + h + "/6#inet#fw4#" + SET + "6";
+      }), [""]).join("\n")
+    };
+  }
+  return {
+    name: "pbr-policy.txt",
+    body: header("OpenWrt pbr policy stanza — append to /etc/config/pbr", hosts.length).concat([
+      "# Change `interface` to whichever wan or vpn this traffic should leave by,",
+      "# then: /etc/init.d/pbr restart",
+      "",
+      "config policy",
+      "\toption name '" + SET + "'",
+      "\toption interface 'wan'",
+      "\toption dest_addr '" + hosts.slice(0, 200).join(" ") + "'",
+      "\toption enabled '1'",
+      ""
+    ]).concat(hosts.length > 200
+      ? ["# " + (hosts.length - 200) + " further names omitted — use domains.txt with an include instead.", ""]
+      : [""]).join("\n")
+  };
+}
+
+function doExport() {
+  var blocked = blockedNames();
+  if (!blocked.length) { toast("Nothing is marked Block yet, so there is nothing to export."); return; }
+  var file = buildExport($("format").value);
+  claude.use("downloads").then(function (downloads) {
+    if (!downloads) { toast("Saving files is not available in this view."); return; }
+    // The save allowlist rejects .conf, so router configs go out as .txt and
+    // get renamed on the router.
+    return downloads.save({ filename: file.name, data: file.body }).then(function () {
+      toast("Saved " + file.name + ".");
+    })["catch"](function (err) {
+      var code = err && err.code;
+      if (code === "declined") return;
+      if (code === "too_large") toast("That file is too large to save.");
+      else if (code === "rate_limited") toast("A save is already open — try again in a moment.");
+      else toast("Could not save that file here.");
+    });
+  })["catch"](function () { toast("Saving files is not available in this view."); });
+}
+
+/* ============================== actions ============================== */
+
+function showError(msg) {
+  var e = $("err");
+  if (!e) return;
+  if (!msg) { e.classList.add("hidden"); e.textContent = ""; return; }
+  e.textContent = msg;
+  e.classList.remove("hidden");
+}
+
+function build(merge) {
+  showError("");
+  var text = $("paste").value.trim();
+  if (!text) { showError("Paste a briefing above first."); return; }
+  var parsed = parseBriefing(text);
+  if (!parsed.length) {
+    showError("No hostnames or addresses found in that text. Paste the briefing from the triage console, or a plain list of names.");
+    return;
+  }
+  if (merge) {
+    var seen = {};
+    state.items.forEach(function (it) { seen[it.name] = it; });
+    var added = 0;
+    parsed.forEach(function (it) {
+      if (seen[it.name]) {
+        // Keep the richer record when the same name arrives twice.
+        if (it.reasons.length && !seen[it.name].reasons.length) seen[it.name].reasons = it.reasons;
+        if (it.score != null && seen[it.name].score == null) seen[it.name].score = it.score;
+        if (seen[it.name].sev === "unsorted" && it.sev !== "unsorted") seen[it.name].sev = it.sev;
+      } else { state.items.push(it); added++; }
+    });
+    toast(added ? added + " new name" + (added === 1 ? "" : "s") + " added." : "Nothing new — the board already had those.");
+  } else {
+    state.items = parsed;
+    // Decisions for names no longer on the board are dropped, not orphaned.
+    var keep = {};
+    parsed.forEach(function (it) { if (state.decisions[it.name]) keep[it.name] = state.decisions[it.name]; });
+    state.decisions = keep;
+    toast(parsed.length + " name" + (parsed.length === 1 ? "" : "s") + " on the board.");
+  }
+  ui.dirty = true;
+  ui.filter = "all";
+  persistLocal();
+  $("paste").value = "";
+  collapseIntake(true);
+  render();
+}
+
+function clearBoard() {
+  state.items = [];
+  state.decisions = {};
+  ui.dirty = true;
+  ui.filter = "all";
+  persistLocal();
+  showError("");
+  collapseIntake(false);
+  render();
+  toast("Board cleared.");
+}
+
+function collapseIntake(hide) {
+  var body = $("intake-body");
+  var btn = $("btn-toggle-intake");
+  if (!body || !btn) return;
+  if (hide) { body.classList.add("hidden"); btn.textContent = "Show"; }
+  else { body.classList.remove("hidden"); btn.textContent = "Hide"; }
+}
+
+function decide(name, d) {
+  if (state.decisions[name] === d) delete state.decisions[name];
+  else state.decisions[name] = d;
+  ui.dirty = true;
+  persistLocal();
+  renderFilters();
+  renderBoard();
+  renderPending();
+  renderSaveState();
+}
+
+/* ============================== boot ============================== */
+
+loadState();
+document.getElementById("root").innerHTML = SHELL;
+
+$("btn-build").addEventListener("click", function () { build(false); });
+$("btn-merge").addEventListener("click", function () { build(true); });
+$("btn-reset").addEventListener("click", clearBoard);
+$("btn-save").addEventListener("click", saveDecisions);
+$("btn-export").addEventListener("click", doExport);
+$("btn-toggle-intake").addEventListener("click", function () {
+  collapseIntake(!$("intake-body").classList.contains("hidden"));
+});
+
+$("filters").addEventListener("click", function (e) {
+  var chip = e.target.closest(".chip");
+  if (!chip) return;
+  ui.filter = chip.getAttribute("data-f");
+  renderFilters();
+  renderBoard();
+});
+
+$("board").addEventListener("click", function (e) {
+  var btn = e.target.closest(".seg button");
+  if (!btn) return;
+  decide(btn.getAttribute("data-name"), btn.getAttribute("data-d"));
+});
+
+if (state.items.length) collapseIntake(true);
+render();
+
+// Probing write access up front means the Save button never lies about what
+// it can do; a read-only viewer sees that immediately rather than on failure.
+claude.use("artifact").then(function (a) {
+  if (!a) { ui.canWrite = false; renderSaveState(); }
+})["catch"](function () { ui.canWrite = false; renderSaveState(); });
+
+})();
+</script>
