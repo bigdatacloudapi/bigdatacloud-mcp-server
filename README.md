@@ -125,6 +125,35 @@ or your LAN. The server binds to loopback by default; `--host 0.0.0.0` opens it
 to the network, which is only sensible on a network you trust or a private
 tailnet.
 
+## The two Artifacts — no server, no key
+
+`artifacts/` holds two self-contained pages, published as Claude Artifacts.
+Between them they cover the whole loop on a phone or any browser, with nothing
+hosted and no API key involved. They cannot reach urlscan.io — the artifact
+sandbox blocks every host except Google Fonts — so they do the half that needs
+no network, and hand the rest to a Claude conversation.
+
+| | |
+|---|---|
+| `resolver-triage.html` | Paste or drop a resolver export. Detects the columns from cell contents, scores every hostname on structure alone, and shows the session window around each finding. Reads CSV, TSV and XLSX. Copies a briefing for Claude. |
+| `verdict-board.html` | Takes that briefing, or Claude's write-up of it. One decision per name — block, allow, investigate — kept with the artifact so the board reads the same on every device. Exports dnsmasq, hosts, nftset and pbr configs. |
+
+The analytical method they encode is written up in
+[`docs/analysis-framework.md`](docs/analysis-framework.md); the workflow that
+joins them is in [`docs/artifact-workflow.md`](docs/artifact-workflow.md).
+
+**On a phone, skip the upload.** An Android web view opens a file picker only if
+the host app implements `onShowFileChooser`; where it doesn't, the tap is
+swallowed with no error and there is no dragging to fall back to. Attach the
+export to a Claude message instead and use the prompt in
+[`docs/android-triage-prompt.md`](docs/android-triage-prompt.md), which carries
+the same scoring model. Pasting text is never blocked, so the verdict board
+works normally either way.
+
+Editing an artifact means editing the HTML here and republishing it.
+`test/artifacts.test.mjs` guards the faults that shipped during development —
+each one silent, visible only in a viewer's browser.
+
 ## Claude on the web and on your phone
 
 Claude connectors are account-level: add it once and it is there on the web app

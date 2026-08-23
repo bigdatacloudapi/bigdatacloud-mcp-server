@@ -1,0 +1,1908 @@
+<title>Resolver Triage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root {
+  --ground: #EEF1F2;
+  --panel: #FFFFFF;
+  --panel-2: #F6F8F9;
+  --ink: #0F1518;
+  --muted: #586268;
+  --rule: #D2D9DC;
+  --rule-strong: #B8C2C7;
+  --accent: #4B45C6;
+  --accent-soft: #E6E5FA;
+  --sev-critical: #B3261E;
+  --sev-warning: #8A5300;
+  --sev-notice: #186566;
+  --sev-unknown: #68737A;
+  --sev-critical-bg: #FBE9E7;
+  --sev-warning-bg: #FBF0DF;
+  --sev-notice-bg: #E2F1F1;
+  --sev-unknown-bg: #EDF0F1;
+  --shadow: 0 1px 2px rgba(15,21,24,.06), 0 8px 24px rgba(15,21,24,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0D1215;
+    --panel: #151C20;
+    --panel-2: #1B2429;
+    --ink: #E3E9EC;
+    --muted: #8F9CA3;
+    --rule: #252F35;
+    --rule-strong: #35424A;
+    --accent: #9E97FF;
+    --accent-soft: #241F52;
+    --sev-critical: #FF7063;
+    --sev-warning: #E3A93C;
+    --sev-notice: #4CC8CA;
+    --sev-unknown: #8A959B;
+    --sev-critical-bg: #2C1512;
+    --sev-warning-bg: #2A1F0B;
+    --sev-notice-bg: #0E2727;
+    --sev-unknown-bg: #1D2529;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0D1215;
+  --panel: #151C20;
+  --panel-2: #1B2429;
+  --ink: #E3E9EC;
+  --muted: #8F9CA3;
+  --rule: #252F35;
+  --rule-strong: #35424A;
+  --accent: #9E97FF;
+  --accent-soft: #241F52;
+  --sev-critical: #FF7063;
+  --sev-warning: #E3A93C;
+  --sev-notice: #4CC8CA;
+  --sev-unknown: #8A959B;
+  --sev-critical-bg: #2C1512;
+  --sev-warning-bg: #2A1F0B;
+  --sev-notice-bg: #0E2727;
+  --sev-unknown-bg: #1D2529;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+:where(button, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 96px; }
+
+/* ---------- masthead ---------- */
+.masthead {
+  border-bottom: 1px solid var(--rule);
+  background: var(--panel);
+}
+.masthead-in {
+  max-width: 1120px; margin: 0 auto; padding: 18px 16px 16px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
+}
+h1 {
+  font-size: 19px; font-weight: 700; letter-spacing: -.015em;
+  margin: 0; text-wrap: balance;
+}
+.tagline { color: var(--muted); font-size: 13.5px; margin: 0; flex: 1 1 260px; }
+.runstat {
+  font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- panels ---------- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  margin-top: 18px;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 11px 14px; border-bottom: 1px solid var(--rule);
+  background: var(--panel-2);
+}
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); margin: 0;
+}
+.panel-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+
+/* ---------- input ---------- */
+.drop {
+  border: 1px dashed var(--rule-strong);
+  background: var(--panel-2);
+  padding: 18px 14px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  transition: border-color .12s, background .12s;
+}
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop p { margin: 0; color: var(--muted); font-size: 13.5px; }
+/* Visually hidden but still focusable and still activatable by its label.
+   `display: none` would make the input unreachable — a programmatic .click()
+   on a hidden input is refused in some sandboxed frames, which is exactly
+   where this page runs. */
+.vh {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+label.btn { display: inline-block; cursor: pointer; }
+#file:focus-visible + label.btn { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.hint.caveat { max-width: 62ch; line-height: 1.5; padding-top: 4px; text-align: left; }
+.drop strong { color: var(--ink); font-weight: 600; }
+
+textarea {
+  width: 100%; min-height: 108px; resize: vertical;
+  padding: 10px 11px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12.5px; line-height: 1.5;
+  color: var(--ink); background: var(--panel);
+  border: 1px solid var(--rule);
+}
+textarea::placeholder { color: var(--muted); opacity: .85; }
+label.field {
+  display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px;
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  font-family: inherit; font-size: 13.5px; font-weight: 600;
+  padding: 8px 14px; border: 1px solid var(--rule-strong);
+  background: var(--panel); color: var(--ink);
+  cursor: pointer; transition: background .12s, border-color .12s;
+}
+.btn:hover { background: var(--panel-2); border-color: var(--muted); }
+.btn-primary {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+:root[data-theme="dark"] .btn-primary { color: #12101F; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-primary { color: #12101F; }
+}
+.btn-primary:hover { filter: brightness(1.08); background: var(--accent); border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------- tally ---------- */
+.tally {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--rule); background: var(--panel); margin-top: 18px;
+}
+.readout {
+  border-right: 1px solid var(--rule);
+  padding: 12px 13px; text-align: left;
+  background: transparent; cursor: pointer;
+  font-family: inherit; color: inherit;
+  display: flex; flex-direction: column; gap: 2px;
+  border-top: 3px solid transparent;
+  transition: background .12s;
+}
+.readout:last-child { border-right: 0; }
+.readout:hover { background: var(--panel-2); }
+.readout[aria-pressed="true"] { background: var(--panel-2); }
+.readout[data-sev="critical"][aria-pressed="true"] { border-top-color: var(--sev-critical); }
+.readout[data-sev="warning"][aria-pressed="true"]  { border-top-color: var(--sev-warning); }
+.readout[data-sev="notice"][aria-pressed="true"]   { border-top-color: var(--sev-notice); }
+.readout[data-sev="unknown"][aria-pressed="true"]  { border-top-color: var(--sev-unknown); }
+.readout-n {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 26px; font-weight: 600; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.readout[data-sev="critical"] .readout-n { color: var(--sev-critical); }
+.readout[data-sev="warning"] .readout-n  { color: var(--sev-warning); }
+.readout[data-sev="notice"] .readout-n   { color: var(--sev-notice); }
+.readout[data-sev="unknown"] .readout-n  { color: var(--sev-unknown); }
+.readout-l { font-size: 12px; color: var(--muted); }
+
+/* ---------- ledger ---------- */
+.ledger { border: 1px solid var(--rule); border-top: 0; background: var(--panel); }
+.row { border-bottom: 1px solid var(--rule); }
+.row:last-child { border-bottom: 0; }
+.row-main {
+  width: 100%; display: grid;
+  grid-template-columns: 30px 1fr auto;
+  align-items: center; gap: 10px;
+  padding: 9px 13px; text-align: left;
+  background: transparent; border: 0; cursor: pointer;
+  font-family: inherit; color: inherit;
+}
+.row-main:hover { background: var(--panel-2); }
+.glyph {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px; font-weight: 600; white-space: pre;
+}
+.row[data-sev="critical"] .glyph { color: var(--sev-critical); }
+.row[data-sev="warning"] .glyph  { color: var(--sev-warning); }
+.row[data-sev="notice"] .glyph   { color: var(--sev-notice); }
+.row[data-sev="unknown"] .glyph  { color: var(--sev-unknown); }
+.name {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px; word-break: break-all; line-height: 1.4;
+}
+.meta {
+  display: flex; align-items: center; gap: 10px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.score { font-weight: 600; color: var(--ink); }
+.row-detail { padding: 0 13px 12px 53px; }
+.reasons { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.reasons li {
+  font-size: 13px; color: var(--muted); line-height: 1.45;
+  padding-left: 19px; position: relative;
+}
+.reasons li::before {
+  content: "—"; position: absolute; left: 0; color: var(--rule-strong);
+}
+.reasons li.note { font-style: italic; }
+
+.window { margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.window-h {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 6px;
+}
+.window-l { margin: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.window-l span {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px; color: var(--ink);
+  background: var(--panel-2); border: 1px solid var(--rule);
+  padding: 2px 6px; word-break: break-all;
+}
+.window-l span.more { color: var(--muted); background: transparent; border-style: dashed; }
+
+.bucket {
+  padding: 11px 13px; border-bottom: 1px solid var(--rule);
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+}
+.bucket:last-child { border-bottom: 0; }
+.bucket-n {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--sev-unknown);
+}
+.bucket p { margin: 0; font-size: 13px; color: var(--muted); flex: 1 1 240px; }
+
+/* ---------- misc ---------- */
+.empty { padding: 34px 18px; text-align: center; }
+.empty p { margin: 0 auto; max-width: 46ch; color: var(--muted); font-size: 14px; }
+.err {
+  padding: 11px 13px; font-size: 13.5px;
+  color: var(--sev-critical); background: var(--sev-critical-bg);
+  border: 1px solid var(--sev-critical);
+}
+.note-strip {
+  margin-top: 18px; padding: 12px 14px;
+  border-left: 3px solid var(--rule-strong); background: var(--panel);
+  border-top: 1px solid var(--rule); border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+}
+.note-strip p { margin: 0; font-size: 13px; color: var(--muted); max-width: 68ch; }
+.note-strip strong { color: var(--ink); font-weight: 600; }
+.cols { font-size: 12px; color: var(--muted); }
+.cols code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px; background: var(--panel-2);
+  padding: 1px 5px; border: 1px solid var(--rule);
+}
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(8px);
+  background: var(--ink); color: var(--ground);
+  padding: 9px 16px; font-size: 13.5px; font-weight: 500;
+  opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+  z-index: 50; max-width: calc(100vw - 32px); text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.hidden { display: none !important; }
+
+@media (max-width: 640px) {
+  .tally { grid-template-columns: repeat(2, 1fr); }
+  .readout:nth-child(2) { border-right: 0; }
+  .readout:nth-child(-n+2) { border-bottom: 1px solid var(--rule); }
+  .readout-n { font-size: 22px; }
+  .row-main { grid-template-columns: 24px 1fr; gap: 8px; padding: 9px 11px; }
+  .meta { grid-column: 2; padding-top: 2px; }
+  .row-detail { padding: 0 11px 12px 43px; }
+  .masthead-in { padding: 14px 16px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <h1>Resolver Triage</h1>
+    <p class="tagline">Structural analysis of a DNS export. Runs entirely in this page.</p>
+    <span class="runstat mono" id="runstat"></span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="panel">
+    <div class="panel-head">
+      <p class="eyebrow">Input</p>
+      <div class="btn-row">
+        <button class="btn" id="btn-example" type="button">Load example</button>
+        <button class="btn" id="btn-clear" type="button">Clear</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div>
+        <label class="field" for="csv">Paste your export here — it analyses as soon as you do</label>
+        <textarea id="csv" spellcheck="false" placeholder="timestamp,question,answers,sourceIp&#10;2026-08-22T09:14:02Z,ocsp.apple.com,17.253.5.203,192.168.1.44"></textarea>
+      </div>
+      <div class="drop" id="drop">
+        <p><strong>Or drag a file onto this box.</strong></p>
+        <input type="file" id="file" class="vh">
+        <label class="btn" for="file">Choose a file</label>
+        <p class="hint">CSV, TSV, XLSX, or a plain list of names</p>
+        <p class="hint caveat"><strong>If that button does nothing</strong>, this page is
+        embedded somewhere that will not open a file picker — common in a phone app's
+        web view, where there is no dragging either. On a phone, attach the export to a
+        Claude message instead and ask for the triage there. On a desktop, open it in
+        Notepad or Excel, select all, copy, and paste it above.</p>
+      </div>
+      <div>
+        <label class="field" for="allow">Domains you already trust — one per line, suppresses brand and lure signals</label>
+        <textarea id="allow" spellcheck="false" style="min-height:56px" placeholder="mycompany.com"></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-run" type="button">Analyse</button>
+        <button class="btn" id="btn-paste" type="button">Paste from clipboard</button>
+      </div>
+      <div class="err hidden" id="err"></div>
+    </div>
+  </section>
+
+  <div id="results" class="hidden">
+    <div class="tally" id="tally"></div>
+    <div class="ledger" id="ledger"></div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <p class="eyebrow">Hand off</p>
+      </div>
+      <div class="panel-body">
+        <p style="margin:0;font-size:13.5px;color:var(--muted);max-width:64ch">
+          Copy the briefing into a Claude conversation. Claude can cross-reference these
+          names against urlscan.io and current reporting, attribute them to the apps that
+          contact them, and tell you which are worth blocking — this page cannot reach the
+          network to do that itself.
+        </p>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-brief" type="button">Copy briefing for Claude</button>
+          <button class="btn" id="btn-export" type="button">Save shortlist</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="note-strip">
+      <p>
+        <strong>Nothing here is a clean bill of health.</strong> This page has no network
+        access, so it can only judge the shape of a name — not its reputation. A name with
+        no signal is one this analysis had nothing to say about, which is the normal state
+        for first-party telemetry and means neither safe nor unsafe.
+      </p>
+    </div>
+  </div>
+
+  <div class="panel empty" id="empty">
+    <p>
+      Paste or drop a Control D, Pi-hole, AdGuard or pfSense export — or any CSV with a
+      column of hostnames. Columns are detected from what the cells contain, so nothing
+      needs configuring first.
+    </p>
+  </div>
+
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+"use strict";
+
+/* ============================ address primitives ============================ */
+
+function parseIPv4(s) {
+  if (typeof s !== "string") return null;
+  var m = s.trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return null;
+  var n = 0;
+  for (var i = 1; i <= 4; i++) {
+    var o = Number(m[i]);
+    if (o > 255) return null;
+    // A leading zero means someone's tool wrote an octal-looking octet.
+    // Refuse rather than silently picking an interpretation.
+    if (m[i].length > 1 && m[i][0] === "0") return null;
+    n = n * 256 + o;
+  }
+  return n >>> 0;
+}
+
+function parseIPv6(s) {
+  if (typeof s !== "string") return null;
+  var str = s.trim().toLowerCase();
+  if (str.charAt(0) === "[" && str.charAt(str.length - 1) === "]") str = str.slice(1, -1);
+  var zone = str.indexOf("%");
+  if (zone !== -1) str = str.slice(0, zone);
+  if (str.indexOf(":") === -1) return null;
+
+  var lastColon = str.lastIndexOf(":");
+  var tail = str.slice(lastColon + 1);
+  if (tail.indexOf(".") !== -1) {
+    var v4 = parseIPv4(tail);
+    if (v4 === null) return null;
+    str = str.slice(0, lastColon + 1) + ((v4 >>> 16) & 0xffff).toString(16) + ":" + (v4 & 0xffff).toString(16);
+  }
+
+  var halves = str.split("::");
+  if (halves.length > 2) return null;
+  var split = function (p) { return p === "" ? [] : p.split(":"); };
+  var head = split(halves[0]);
+  var rest = halves.length === 2 ? split(halves[1]) : [];
+  var groups;
+  if (halves.length === 2) {
+    var fill = 8 - head.length - rest.length;
+    if (fill < 0) return null;
+    groups = head.slice();
+    for (var f = 0; f < fill; f++) groups.push("0");
+    groups = groups.concat(rest);
+  } else {
+    groups = head;
+  }
+  if (groups.length !== 8) return null;
+
+  var bytes = new Uint8Array(16);
+  for (var g = 0; g < 8; g++) {
+    if (!/^[0-9a-f]{1,4}$/.test(groups[g])) return null;
+    var v = parseInt(groups[g], 16);
+    bytes[g * 2] = v >>> 8;
+    bytes[g * 2 + 1] = v & 0xff;
+  }
+  return bytes;
+}
+
+// IPv4-mapped IPv6 (::ffff:1.2.3.4) is unwrapped to plain IPv4 — exports mix
+// the two spellings for one host and every check downstream wants one address.
+function parseIP(s) {
+  var v4 = parseIPv4(s);
+  if (v4 !== null) return { version: 4, value: v4 };
+  var v6 = parseIPv6(s);
+  if (!v6) return null;
+  var mapped = true;
+  for (var i = 0; i < 10; i++) if (v6[i] !== 0) { mapped = false; break; }
+  if (mapped && v6[10] === 0xff && v6[11] === 0xff) {
+    return { version: 4, value: (((v6[12] << 24) >>> 0) + (v6[13] << 16) + (v6[14] << 8) + v6[15]) >>> 0 };
+  }
+  return { version: 6, value: v6 };
+}
+
+function isIP(s) { return parseIP(s) !== null; }
+
+function normaliseIP(s) {
+  var p = parseIP(s);
+  if (!p) return null;
+  if (p.version === 4) {
+    var n = p.value;
+    return [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
+  }
+  var groups = [];
+  for (var i = 0; i < 16; i += 2) groups.push(((p.value[i] << 8) | p.value[i + 1]).toString(16));
+  var bestStart = -1, bestLen = 0, start = -1;
+  for (var j = 0; j <= groups.length; j++) {
+    if (j < groups.length && groups[j] === "0") {
+      if (start === -1) start = j;
+    } else if (start !== -1) {
+      var len = j - start;
+      if (len > bestLen && len >= 2) { bestLen = len; bestStart = start; }
+      start = -1;
+    }
+  }
+  if (bestStart === -1) return groups.join(":");
+  return groups.slice(0, bestStart).join(":") + "::" + groups.slice(bestStart + bestLen).join(":");
+}
+
+function inCidr(ip, cidr) {
+  var a = (typeof ip === "object" && ip) ? ip : parseIP(ip);
+  if (!a) return false;
+  var slash = cidr.lastIndexOf("/");
+  var base = parseIP(slash === -1 ? cidr : cidr.slice(0, slash));
+  if (!base || base.version !== a.version) return false;
+  var bits = slash === -1 ? (a.version === 4 ? 32 : 128) : Number(cidr.slice(slash + 1));
+  if (!isFinite(bits) || bits < 0) return false;
+  if (a.version === 4) {
+    if (bits > 32) return false;
+    var mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+    return ((a.value & mask) >>> 0) === ((base.value & mask) >>> 0);
+  }
+  if (bits > 128) return false;
+  var full = bits >> 3;
+  for (var i = 0; i < full; i++) if (a.value[i] !== base.value[i]) return false;
+  var rem = bits & 7;
+  if (rem === 0) return true;
+  var m8 = (0xff << (8 - rem)) & 0xff;
+  return (a.value[full] & m8) === (base.value[full] & m8);
+}
+
+// IANA special-purpose blocks, most-specific first. routable:false means the
+// address cannot legitimately be a public answer — seeing one is the finding.
+var SPECIAL_USE = [
+  { cidr: "0.0.0.0/8", label: "this-network", routable: false },
+  { cidr: "10.0.0.0/8", label: "private (RFC1918)", routable: false },
+  { cidr: "100.64.0.0/10", label: "CGNAT (RFC6598)", routable: false },
+  { cidr: "127.0.0.0/8", label: "loopback", routable: false },
+  { cidr: "169.254.0.0/16", label: "link-local", routable: false },
+  { cidr: "172.16.0.0/12", label: "private (RFC1918)", routable: false },
+  { cidr: "192.0.0.0/24", label: "IETF protocol assignments", routable: false },
+  { cidr: "192.0.2.0/24", label: "documentation (TEST-NET-1)", routable: false },
+  { cidr: "192.88.99.0/24", label: "6to4 relay anycast (deprecated)", routable: false },
+  { cidr: "192.168.0.0/16", label: "private (RFC1918)", routable: false },
+  { cidr: "198.18.0.0/15", label: "benchmarking", routable: false },
+  { cidr: "198.51.100.0/24", label: "documentation (TEST-NET-2)", routable: false },
+  { cidr: "203.0.113.0/24", label: "documentation (TEST-NET-3)", routable: false },
+  { cidr: "224.0.0.0/4", label: "multicast", routable: false },
+  { cidr: "240.0.0.0/4", label: "reserved", routable: false },
+  { cidr: "255.255.255.255/32", label: "broadcast", routable: false },
+  { cidr: "::/128", label: "unspecified", routable: false },
+  { cidr: "::1/128", label: "loopback", routable: false },
+  { cidr: "64:ff9b::/96", label: "NAT64 well-known prefix", routable: true },
+  { cidr: "100::/64", label: "discard-only", routable: false },
+  { cidr: "2001:db8::/32", label: "documentation", routable: false },
+  { cidr: "2001::/32", label: "Teredo", routable: true },
+  { cidr: "2002::/16", label: "6to4", routable: true },
+  { cidr: "fc00::/7", label: "unique local (ULA)", routable: false },
+  { cidr: "fe80::/10", label: "link-local", routable: false },
+  { cidr: "ff00::/8", label: "multicast", routable: false }
+];
+
+function classifyIP(s) {
+  var p = parseIP(s);
+  if (!p) return null;
+  var hit = null;
+  for (var i = 0; i < SPECIAL_USE.length; i++) {
+    if (inCidr(p, SPECIAL_USE[i].cidr)) { hit = SPECIAL_USE[i]; break; }
+  }
+  return {
+    ip: normaliseIP(s), version: p.version,
+    special: hit ? hit.label : null,
+    cidr: hit ? hit.cidr : null,
+    routable: hit ? hit.routable : true
+  };
+}
+
+var HOSTNAME_RE = /^[a-z0-9_-]{1,63}(\.[a-z0-9_-]{1,63})*\.?$/;
+
+function normaliseHost(input) {
+  if (typeof input !== "string") return null;
+  var h = input.trim().toLowerCase();
+  if (!h) return null;
+  if (h.indexOf("://") !== -1) {
+    try { h = new URL(h).hostname; } catch (e) { return null; }
+  } else if (/^[^/\s]+:\d{1,5}$/.test(h) && h.indexOf("::") === -1) {
+    h = h.slice(0, h.lastIndexOf(":"));
+  }
+  h = h.replace(/^\*\./, "").replace(/\.$/, "");
+  if (h.charAt(0) === "[" && h.charAt(h.length - 1) === "]") h = h.slice(1, -1);
+  return h || null;
+}
+
+function isHostname(s) {
+  var h = normaliseHost(s);
+  if (!h) return false;
+  if (isIP(h)) return false;
+  if (h.indexOf(".") === -1) return false;   // no registrable domain
+  if (h.length > 253) return false;
+  if (/(^|\.)-|-(\.|$)/.test(h)) return false;
+  return HOSTNAME_RE.test(h);
+}
+
+var MULTI_LABEL_SUFFIXES = {};
+("co.uk org.uk ac.uk gov.uk me.uk net.uk sch.uk com.au net.au org.au edu.au gov.au id.au " +
+ "co.nz net.nz org.nz govt.nz ac.nz com.br net.br org.br gov.br co.jp or.jp ne.jp ac.jp go.jp lg.jp " +
+ "co.kr or.kr ne.kr go.kr re.kr com.cn net.cn org.cn gov.cn edu.cn ac.cn co.in net.in org.in gov.in ac.in res.in " +
+ "com.mx org.mx gob.mx com.ar gob.ar org.ar com.tr gov.tr org.tr com.sg com.hk com.tw com.pk net.pk org.pk gov.pk edu.pk " +
+ "co.za org.za gov.za com.my com.ph com.vn co.il org.il gov.il com.ua com.pl gov.pl co.id or.id go.id com.sa com.eg com.ng " +
+ "gc.ca on.ca qc.ca bc.ca ab.ca com.es gob.es co.th in.th go.th " +
+ "s3.amazonaws.com cloudfront.net azurewebsites.net blob.core.windows.net github.io gitlab.io pages.dev workers.dev " +
+ "vercel.app netlify.app herokuapp.com firebaseapp.com web.app appspot.com r2.dev duckdns.org ngrok.io ngrok-free.app " +
+ "trycloudflare.com loca.lt").split(" ").forEach(function (s) { MULTI_LABEL_SUFFIXES[s] = true; });
+
+function apexOf(host) {
+  var h = normaliseHost(host);
+  if (!h || isIP(h)) return null;
+  var parts = h.split(".").filter(Boolean);
+  if (parts.length < 2) return null;
+  for (var take = Math.min(5, parts.length); take >= 3; take--) {
+    var suffix = parts.slice(-(take - 1)).join(".");
+    if (MULTI_LABEL_SUFFIXES[suffix]) return parts.slice(-take).join(".");
+  }
+  return parts.slice(-2).join(".");
+}
+
+function tldOf(host) {
+  var h = normaliseHost(host);
+  if (!h || isIP(h)) return null;
+  var parts = h.split(".").filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : null;
+}
+
+/* ============================== CSV parsing ============================== */
+
+function stripBom(s) { return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s; }
+
+function splitLine(line, delim) {
+  var out = [], cur = "", q = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line.charAt(i);
+    if (q) {
+      if (c === '"') {
+        if (line.charAt(i + 1) === '"') { cur += '"'; i++; } else q = false;
+      } else cur += c;
+    } else if (c === '"' && cur === "") q = true;
+    else if (c === delim) { out.push(cur); cur = ""; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+
+// Pick by consistency, not frequency: the right delimiter is the one giving
+// the same field count on most lines. A comma inside prose beats a real tab
+// on raw count alone.
+function sniffDelimiter(text) {
+  var lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); }).slice(0, 40);
+  if (!lines.length) return ",";
+  var best = ",", bestScore = -1;
+  [",", "\t", ";", "|"].forEach(function (d) {
+    var counts = lines.map(function (l) { return splitLine(l, d).length; });
+    var first = counts[0];
+    if (first < 2) return;
+    var agree = counts.filter(function (c) { return c === first; }).length / counts.length;
+    var score = agree * 100 + Math.min(first, 40);
+    if (score > bestScore) { bestScore = score; best = d; }
+  });
+  return best;
+}
+
+function parseCSV(text, delimiter) {
+  var src = stripBom(String(text));
+  var delim = delimiter || sniffDelimiter(src);
+  var rows = [], row = [], cur = "", q = false, started = false;
+  for (var i = 0; i < src.length; i++) {
+    var c = src.charAt(i);
+    if (q) {
+      if (c === '"') {
+        if (src.charAt(i + 1) === '"') { cur += '"'; i++; } else q = false;
+      } else cur += c;
+      continue;
+    }
+    if (c === '"' && !started) { q = true; started = true; continue; }
+    if (c === delim) { row.push(cur); cur = ""; started = false; continue; }
+    if (c === "\r") continue;
+    if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; started = false; continue; }
+    cur += c;
+    started = true;
+  }
+  if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter(function (r) { return r.length > 1 || (r[0] || "").trim() !== ""; });
+}
+
+var HOST_HEADERS = ("question queryname query hostname host domain domainname fqdn apex apexdomain sni servername " +
+  "site website cname name url page pageurl requesturl referer referrer target").split(" ");
+var IP_HEADERS = ("answers answer ip ipaddress ipaddr address addr resolvedip resolved destination destinationip " +
+  "dest dst dstip sourceip srcip src source remoteip clientip serverip a aaaa record rdata value").split(" ");
+// Columns describing WHO ASKED, not what was answered. Still worth verifying,
+// but pairing them with the row's hostname would claim the query resolved to
+// the client that made it — a false mismatch on every row.
+var SOURCE_IP_HEADERS = ["sourceip", "srcip", "src", "source", "clientip", "remoteip"];
+var TIME_HEADERS = ["timestamp", "time", "datetime", "date", "when", "ts", "createdat", "occurredat"];
+
+/** Milliseconds for a cell that reads as a time, else null. */
+function parseTime(v) {
+  var s = String(v == null ? "" : v).trim();
+  if (!s) return null;
+  // A bare number is an epoch — seconds or milliseconds, by magnitude.
+  if (/^\d{9,13}$/.test(s)) {
+    var n = Number(s);
+    return s.length <= 10 ? n * 1000 : n;
+  }
+  if (!/\d{4}|\d{1,2}:\d{2}/.test(s)) return null;
+  var t = Date.parse(s);
+  return isFinite(t) ? t : null;
+}
+
+function normHeader(h) { return String(h == null ? "" : h).toLowerCase().replace(/[^a-z0-9]/g, ""); }
+function ipRole(header) { return SOURCE_IP_HEADERS.indexOf(normHeader(header)) !== -1 ? "source" : "answer"; }
+
+function splitCell(v) {
+  return String(v == null ? "" : v).split(/[;,|\s]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+}
+
+function detectColumns(rows) {
+  if (!rows.length) return { headers: [], hostCols: [], ipCols: [], hasHeader: false };
+  var width = 0;
+  rows.forEach(function (r) { if (r.length > width) width = r.length; });
+  var first = rows[0];
+
+  var firstLooksLikeData = first.some(function (c) { return isHostname(c) || isIP(c); });
+  var firstMatchesHeaders = first.some(function (c) {
+    var n = normHeader(c);
+    return HOST_HEADERS.indexOf(n) !== -1 || IP_HEADERS.indexOf(n) !== -1;
+  });
+  var allWordy = first.every(function (c) { return /^[a-zA-Z_][\w \-./]*$/.test(String(c).trim()); });
+  var hasHeader = !firstLooksLikeData && (firstMatchesHeaders || allWordy);
+
+  var headers = [];
+  for (var i = 0; i < width; i++) {
+    headers.push(hasHeader ? (String(first[i] == null ? "" : first[i]).trim() || ("col" + (i + 1))) : ("col" + (i + 1)));
+  }
+  var body = hasHeader ? rows.slice(1) : rows;
+  var sample = body.slice(0, 400);
+
+  var stats = headers.map(function (h, idx) {
+    var filled = 0, host = 0, ip = 0;
+    sample.forEach(function (r) {
+      var raw = r[idx];
+      if (raw === undefined || String(raw).trim() === "") return;
+      filled++;
+      var parts = splitCell(raw);
+      if (parts.some(isIP)) ip++;
+      else if (parts.some(isHostname)) host++;
+    });
+    var n = normHeader(h);
+    return {
+      index: idx, header: h, filled: filled,
+      hostRatio: filled ? host / filled : 0,
+      ipRatio: filled ? ip / filled : 0,
+      headerHost: HOST_HEADERS.indexOf(n),
+      headerIp: IP_HEADERS.indexOf(n)
+    };
+  });
+
+  // Content qualifies a column on its own; a matching header only breaks ties
+  // and rescues sparse columns.
+  function rank(key, headerKey) {
+    return stats.filter(function (s) {
+      return s.filled > 0 && (s[key] >= 0.6 || (s[headerKey] !== -1 && s[key] >= 0.15));
+    }).sort(function (a, b) {
+      var ha = a[headerKey] === -1 ? 999 : a[headerKey];
+      var hb = b[headerKey] === -1 ? 999 : b[headerKey];
+      if (ha !== hb) return ha - hb;
+      return b[key] - a[key];
+    });
+  }
+
+  var ipCols = rank("ipRatio", "headerIp");
+  var taken = {};
+  ipCols.forEach(function (s) { taken[s.index] = true; });
+  var hostCols = rank("hostRatio", "headerHost").filter(function (s) { return !taken[s.index]; });
+
+  // A time column unlocks the co-occurrence window, which is the difference
+  // between "this name looks odd" and "this name fired inside that app's
+  // startup burst". Header first, then content.
+  var timeCol = -1;
+  for (var t = 0; t < headers.length; t++) {
+    if (TIME_HEADERS.indexOf(normHeader(headers[t])) !== -1 && !taken[t]) { timeCol = t; break; }
+  }
+  if (timeCol === -1) {
+    for (var u = 0; u < headers.length; u++) {
+      if (taken[u]) continue;
+      var hits = 0, seen = 0;
+      for (var r = 0; r < Math.min(sample.length, 40); r++) {
+        var cell = sample[r][u];
+        if (cell === undefined || String(cell).trim() === "") continue;
+        seen++;
+        if (parseTime(cell) !== null) hits++;
+      }
+      if (seen >= 3 && hits / seen >= 0.8) { timeCol = u; break; }
+    }
+  }
+
+  return {
+    headers: headers, hasHeader: hasHeader, timeCol: timeCol,
+    hostCols: hostCols.map(function (s) { return { index: s.index, header: s.header }; }),
+    ipCols: ipCols.map(function (s) { return { index: s.index, header: s.header, role: ipRole(s.header) }; })
+  };
+}
+
+function extract(text) {
+  var rows = parseCSV(text);
+  if (!rows.length) return { rowCount: 0, columns: { headers: [], hostCols: [], ipCols: [] }, hosts: [], ips: [], pairs: [] };
+
+  var columns = detectColumns(rows);
+  var body = columns.hasHeader ? rows.slice(1) : rows;
+  var hostIdx = columns.hostCols.map(function (c) { return c.index; });
+  var ipIdx = columns.ipCols.map(function (c) { return c.index; });
+  var answerIdx = {};
+  columns.ipCols.forEach(function (c) { if (c.role !== "source") answerIdx[c.index] = true; });
+
+  var hosts = {}, ips = {}, pairs = {};
+  var timeline = [];
+  var timeCol = columns.timeCol == null ? -1 : columns.timeCol;
+
+  body.forEach(function (row, rowIdx) {
+    var rowHosts = {}, rowIPs = {}, rowAnswers = {};
+    hostIdx.forEach(function (i) {
+      splitCell(row[i]).forEach(function (part) {
+        var h = normaliseHost(part);
+        if (h && isHostname(h)) rowHosts[h] = true;
+      });
+    });
+    ipIdx.forEach(function (i) {
+      splitCell(row[i]).forEach(function (part) {
+        if (isIP(part)) {
+          var norm = normaliseIP(part);
+          rowIPs[norm] = true;
+          if (answerIdx[i]) rowAnswers[norm] = true;
+        } else {
+          // Some exports put a CNAME target in the answer column. Those are
+          // hostnames and belong with the hosts.
+          var h = normaliseHost(part);
+          if (h && isHostname(h)) rowHosts[h] = true;
+        }
+      });
+    });
+    Object.keys(rowHosts).forEach(function (h) {
+      if (!hosts[h]) hosts[h] = { host: h, count: 0 };
+      hosts[h].count++;
+    });
+    Object.keys(rowIPs).forEach(function (ip) {
+      if (!ips[ip]) ips[ip] = { ip: ip, count: 0 };
+      ips[ip].count++;
+    });
+    Object.keys(rowHosts).forEach(function (h) {
+      Object.keys(rowAnswers).forEach(function (ip) {
+        var k = h + "|" + ip;
+        if (!pairs[k]) pairs[k] = { host: h, ip: ip, count: 0 };
+        pairs[k].count++;
+      });
+    });
+
+    var names = Object.keys(rowHosts);
+    if (names.length) {
+      // With no usable clock, row order still orders events — good enough to
+      // read a burst, just not to measure one.
+      var t = timeCol >= 0 ? parseTime(row[timeCol]) : null;
+      timeline.push({ t: t, i: rowIdx, hosts: names });
+    }
+  });
+
+  var byCount = function (a, b) {
+    return b.count - a.count || String(a.host || a.ip).localeCompare(String(b.host || b.ip));
+  };
+  return {
+    rowCount: body.length,
+    columns: columns,
+    timeline: timeline,
+    hasClock: timeCol >= 0 && timeline.some(function (e) { return e.t !== null; }),
+    hosts: Object.keys(hosts).map(function (k) { return hosts[k]; }).sort(byCount),
+    ips: Object.keys(ips).map(function (k) { return ips[k]; }).sort(byCount),
+    pairs: Object.keys(pairs).map(function (k) { return pairs[k]; }).sort(byCount)
+  };
+}
+
+/**
+ * What else the device was talking to when this name first appeared.
+ *
+ * A name rarely means much alone. A tight burst of first-party API hosts plus
+ * a small coherent SDK set reads as one app starting up; forty unrelated
+ * ad-network hosts in two seconds reads as a mediation waterfall. Same name,
+ * entirely different conclusion.
+ */
+var WINDOW_MS = 120000;   // ±2 minutes
+var WINDOW_ROWS = 12;     // fallback when the export carries no usable clock
+
+function coOccurring(host, ex, limit) {
+  var tl = ex.timeline;
+  if (!tl || !tl.length) return null;
+  var at = -1;
+  for (var i = 0; i < tl.length; i++) {
+    if (tl[i].hosts.indexOf(host) !== -1) { at = i; break; }
+  }
+  if (at === -1) return null;
+
+  var anchor = tl[at];
+  var timed = ex.hasClock && anchor.t !== null;
+  var near = {};
+  for (var j = 0; j < tl.length; j++) {
+    var e = tl[j];
+    var within = (timed && e.t !== null)
+      ? Math.abs(e.t - anchor.t) <= WINDOW_MS
+      : Math.abs(j - at) <= WINDOW_ROWS;
+    if (!within) continue;
+    for (var k = 0; k < e.hosts.length; k++) {
+      if (e.hosts[k] !== host) near[e.hosts[k]] = (near[e.hosts[k]] || 0) + 1;
+    }
+  }
+  var names = Object.keys(near).sort(function (a, b) { return near[b] - near[a] || a.localeCompare(b); });
+  if (!names.length) return null;
+  return { names: names.slice(0, limit || 12), total: names.length, timed: timed };
+}
+
+/* ============================== heuristics ============================== */
+
+var RISKY_TLDS = {};
+("tk ml ga cf gq top xyz buzz cyou sbs cfd rest click link quest monster bar beauty makeup skin hair mom lol icu " +
+ "wang work loan download racing win bid party review stream trade date zip mov kim country gdn men accountant science")
+  .split(" ").forEach(function (t) { RISKY_TLDS[t] = true; });
+
+var EPHEMERAL_SUFFIXES = ("duckdns.org no-ip.org no-ip.com ddns.net hopto.org zapto.org sytes.net myftp.org serveo.net " +
+ "localtunnel.me loca.lt ngrok.io ngrok-free.app ngrok.app trycloudflare.com tunnelto.dev pagekite.me localhost.run " +
+ "telebit.io bore.pub workers.dev pages.dev r2.dev vercel.app netlify.app onrender.com glitch.me repl.co replit.dev " +
+ "github.io herokuapp.com firebaseapp.com web.app appspot.com azurewebsites.net weebly.com wixsite.com blogspot.com " +
+ "000webhostapp.com").split(" ");
+
+var DOH_ENDPOINTS = {};
+("dns.google dns64.dns.google cloudflare-dns.com mozilla.cloudflare-dns.com security.cloudflare-dns.com " +
+ "family.cloudflare-dns.com one.one.one.one dns.quad9.net dns9.quad9.net dns11.quad9.net dns.nextdns.io " +
+ "doh.opendns.com familyshield.opendns.com dns.adguard.com dns-family.adguard.com dns-unfiltered.adguard.com " +
+ "doh.cleanbrowsing.org doh.dns.sb dns.sb doh.mullvad.net dns.controld.com freedns.controld.com dns.alidns.com " +
+ "doh.pub doh.360.cn dns.yandex.ru resolver.dnscrypt.info odoh.cloudflare-dns.com mask.icloud.com mask-h2.icloud.com " +
+ "mask-canary.icloud.com").split(" ").forEach(function (d) { DOH_ENDPOINTS[d] = true; });
+
+var INTERNAL_TLDS = {};
+("local localhost localdomain lan home home-arpa internal intranet corp private test invalid example domain onion")
+  .split(" ").forEach(function (t) { INTERNAL_TLDS[t] = true; });
+
+var WATCHED_BRANDS = ("paypal apple icloud microsoft office365 outlook onedrive google gmail youtube amazon aws netflix " +
+ "facebook instagram whatsapp linkedin twitter coinbase binance metamask ledger chase wellsfargo bankofamerica citibank " +
+ "hsbc barclays revolut dhl fedex ups usps royalmail canadapost steam roblox discord telegram signal dropbox docusign " +
+ "adobe okta duo").split(" ");
+
+// Without this list googleusercontent.com and apple-cloudkit.com read as
+// impersonation. A verifier that cries wolf on a company's own CDN gets
+// ignored, which is the only real failure mode a tool like this has.
+var FIRST_PARTY_APEXES = {};
+("google.com googleapis.com googleusercontent.com googlevideo.com gstatic.com googletagmanager.com googlesyndication.com " +
+ "google-analytics.com youtube.com ytimg.com ggpht.com googleadservices.com withgoogle.com apple.com icloud.com " +
+ "icloud-content.com apple-cloudkit.com cdn-apple.com mzstatic.com aaplimg.com apple-dns.net push.apple.com " +
+ "microsoft.com microsoftonline.com office.com office365.com live.com outlook.com windows.net azure.com azureedge.net " +
+ "msftncsi.com msn.com bing.com sharepoint.com onedrive.com skype.com xbox.com amazon.com amazonaws.com cloudfront.net " +
+ "media-amazon.com ssl-images-amazon.com amazontrust.com a2z.com aiv-cdn.net facebook.com fbcdn.net instagram.com " +
+ "whatsapp.com whatsapp.net messenger.com fb.com cdninstagram.com netflix.com nflxvideo.net nflximg.net linkedin.com " +
+ "licdn.com twitter.com x.com twimg.com dropbox.com dropboxstatic.com adobe.com adobe.io typekit.net okta.com oktacdn.com " +
+ "duosecurity.com docusign.net docusign.com discord.com discordapp.com discord.gg telegram.org t.me signal.org " +
+ "steamstatic.com steampowered.com steamcommunity.com roblox.com rbxcdn.com coinbase.com binance.com paypal.com " +
+ "paypalobjects.com venmo.com cloudflare.com cloudflare-dns.com akamai.net akamaiedge.net akamaized.net fastly.net " +
+ "fastlylb.net jsdelivr.net unpkg.com cdnjs.com github.com githubusercontent.com githubassets.com gitlab.com mozilla.com " +
+ "mozilla.org mozilla.net firefox.com ubuntu.com canonical.com debian.org archlinux.org")
+  .split(" ").forEach(function (a) { FIRST_PARTY_APEXES[a] = true; });
+
+var LURE_WORDS = ("login signin verify verification secure security account update confirm recover unlock suspended " +
+ "billing invoice payment wallet support helpdesk webmail auth sso mfa otp password reset alert notice refund claim gift")
+  .split(" ");
+
+/**
+ * Infrastructure already identified in earlier investigations.
+ *
+ * Naming a host is worth more than scoring it. "ingest.prod.verisoul.ai" reads
+ * as alarming until you know it is an anti-fraud SDK, at which point the
+ * question becomes which app bundled it — a question this page cannot answer
+ * but the co-occurrence window below can help with.
+ *
+ * A match here suppresses the brand, lure and algorithmic-name signals, which
+ * would otherwise fire on exactly these shapes.
+ */
+var KNOWN_VENDORS = [
+  { re: /(^|\.)sc-gw\.com$|(^|\.)sc-cdn\.net$|^app-analytics-v2\.snapchat\.com$/, name: "Snapchat SDK telemetry" },
+  { re: /(^|\.)split\.io$/, name: "Split.io (Harness) — feature-flag and experimentation SDK" },
+  { re: /(^|\.)superwall\.(com|me)$/, name: "Superwall — paywall presentation and A/B testing. Firing means a paywall screen was evaluated" },
+  { re: /(^|\.)revenuecat\.com$/, name: "RevenueCat — subscription and in-app-purchase management" },
+  { re: /(^|\.)verisoul\.ai$/, name: "Verisoul — device fingerprinting and fraud detection" },
+  { re: /(^|\.)gist\.build$/, name: "Gist — in-app messaging and onboarding prompts" },
+  { re: /(^|\.)pawwalls\.com$/, name: "Pawwalls — paywall SaaS, CloudFront-fronted" },
+  { re: /(^|\.)eo\.dnse2\.com$/, name: "Tencent Cloud EdgeOne CDN — large shared multi-tenant CDN, so unrelated brands share this suffix" },
+  { re: /^ak8s-prod-[^.]*\.apple\.com$/, name: "Apple internal Kubernetes ingress (“Daiquiri”)" },
+  { re: /(^|\.)itunes\.apple\.com$|(^|\.)apps\.apple\.com$|^app-site-association\.cdn-apple\.com$/, name: "Apple App Store / StoreKit" },
+  { re: /(^|\.)crashlytics\.com$|(^|\.)firebase(io|installations|remoteconfig)?\.(com|net|googleapis\.com)$/, name: "Firebase / Crashlytics — analytics and crash reporting" },
+  { re: /(^|\.)sentry\.io$|(^|\.)bugsnag\.com$/, name: "Crash and error reporting" },
+  { re: /(^|\.)onetrust\.com$|(^|\.)cookielaw\.org$/, name: "OneTrust — consent management, fires on browser page loads" },
+  { re: /(^|\.)branch\.io$|(^|\.)appsflyer\.com$|(^|\.)adjust\.com$/, name: "Mobile attribution SDK" },
+  { re: /(^|\.)amplitude\.com$|(^|\.)mixpanel\.com$|(^|\.)segment\.(com|io)$|(^|\.)posthog\.com$/, name: "Product analytics SDK" },
+  { re: /(^|\.)intercom\.(io|com)$|(^|\.)braze\.com$|(^|\.)iterable\.com$/, name: "Customer messaging platform" },
+  { re: /(^|\.)stripe\.com$|(^|\.)braintreegateway\.com$|(^|\.)adyen\.com$/, name: "Payment processor" },
+  { re: /(^|\.)launchdarkly\.com$|(^|\.)optimizely\.com$/, name: "Feature-flag / experimentation platform" }
+];
+
+function knownVendor(host) {
+  for (var i = 0; i < KNOWN_VENDORS.length; i++) {
+    if (KNOWN_VENDORS[i].re.test(host)) return KNOWN_VENDORS[i];
+  }
+  return null;
+}
+
+function entropy(s) {
+  if (!s) return 0;
+  var freq = {}, i;
+  for (i = 0; i < s.length; i++) freq[s.charAt(i)] = (freq[s.charAt(i)] || 0) + 1;
+  var h = 0;
+  for (var k in freq) {
+    if (!Object.prototype.hasOwnProperty.call(freq, k)) continue;
+    var p = freq[k] / s.length;
+    h -= p * (Math.log(p) / Math.LN2);
+  }
+  return h;
+}
+
+function looksAlgorithmic(label) {
+  var l = String(label || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (l.length < 10) return { hit: false, score: 0, entropy: 0 };
+  var h = entropy(l);
+  var vowels = (l.match(/[aeiou]/g) || []).length / l.length;
+  var digits = (l.match(/\d/g) || []).length / l.length;
+  var runs = l.match(/[bcdfghjklmnpqrstvwxyz]+/g) || [""];
+  var run = 0;
+  runs.forEach(function (r) { if (r.length > run) run = r.length; });
+
+  var score = 0;
+  if (h > 3.4) score += (h - 3.4) * 2;
+  if (vowels < 0.26) score += (0.26 - vowels) * 6;
+  if (run >= 5) score += (run - 4) * 0.4;
+  if (digits > 0.3) score += (digits - 0.3) * 3;
+  if (/^[0-9a-f]{16,}$/.test(l)) score += 3;
+  if (/^[a-z2-7]{26,}$/.test(l)) score += 2;
+
+  return { hit: score >= 1.6, score: Math.round(score * 100) / 100, entropy: Math.round(h * 100) / 100 };
+}
+
+function editDistance(a, b, max) {
+  max = max || 3;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  var prev = [], i, j;
+  for (j = 0; j <= b.length; j++) prev[j] = j;
+  for (i = 1; i <= a.length; i++) {
+    var cur = [i], best = i;
+    for (j = 1; j <= b.length; j++) {
+      var cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+function analyseHost(host, allowApexes) {
+  var h = normaliseHost(host) || String(host || "").toLowerCase();
+  var apex = apexOf(h);
+  var tld = tldOf(h);
+  var labels = h.split(".");
+  var signals = [];
+  function add(id, weight, detail) { signals.push({ id: id, weight: weight, detail: detail }); }
+  var vendor = knownVendor(h);
+  // Identified infrastructure is treated like an operator allowlist entry: the
+  // shape-based signals stop firing, and the name is reported instead.
+  var allowed = !!(allowApexes && allowApexes[apex]) || !!vendor;
+  if (vendor) add("known-vendor", 0, "Identified: " + vendor.name);
+
+  var puny = labels.filter(function (l) { return l.indexOf("xn--") === 0; });
+  if (puny.length) {
+    add("punycode", 22, "Internationalised (punycode) label — renders as non-Latin text and can imitate another name: " + puny.join(", "));
+  }
+  if (/[^\x00-\x7f]/.test(String(host))) {
+    add("non-ascii", 18, "Contains non-ASCII characters — check for a homograph of a name you trust");
+  }
+
+  if (h.length > 60) add("very-long", 6, "Unusually long hostname (" + h.length + " characters)");
+  if (labels.length >= 6) add("deep-nesting", 6, labels.length + " labels deep — common in tracking and in wildcard abuse");
+  if (/\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}/.test(h)) {
+    add("embedded-address", 8, "An IPv4 address is embedded in the hostname — typical of auto-generated hosting PTRs and of malware fallback names");
+  }
+  var hyphens = (h.match(/-/g) || []).length;
+  if (hyphens >= 4) add("hyphen-heavy", 5, hyphens + " hyphens — long hyphenated names are a phishing staple");
+
+  var apexLabel = apex ? apex.split(".")[0] : labels[0];
+  var alg = looksAlgorithmic(apexLabel);
+  if (alg.hit && !allowed) {
+    add("algorithmic-name", Math.min(24, 8 + alg.score * 4),
+      'Registrable label "' + apexLabel + '" looks machine-generated (entropy ' + alg.entropy + ') — the shape of a DGA or a throwaway host');
+  }
+
+  if (tld && RISKY_TLDS[tld] && !allowed) {
+    add("risky-tld", 12, "." + tld + " carries a persistently high abuse rate — not damning on its own, but worth confirming");
+  }
+  var ephemeral = null;
+  for (var e = 0; e < EPHEMERAL_SUFFIXES.length; e++) {
+    var suf = EPHEMERAL_SUFFIXES[e];
+    if (h === suf || h.slice(-(suf.length + 1)) === "." + suf) { ephemeral = suf; break; }
+  }
+  if (ephemeral && !allowed) {
+    add("ephemeral-host", 10, "Hosted on " + ephemeral + " — free or tunnelled hosting, trivially disposable, and a common way to bypass network policy");
+  }
+
+  if (tld && INTERNAL_TLDS[tld]) {
+    add("internal-name", 4, "." + tld + " is reserved for internal use and is not meant to resolve publicly. Seeing it in a public resolver log means internal naming is leaking off the network");
+  }
+
+  if (DOH_ENDPOINTS[h]) {
+    add("doh-resolver", 20, "A public encrypted-DNS endpoint. If this network filters DNS at one resolver, a device reaching this is routing around the filter");
+  }
+
+  // A brand name only matters when the REGISTRABLE domain is not the brand's.
+  if (!allowed && apex && !FIRST_PARTY_APEXES[apex]) {
+    var apexLabelRaw = apex.slice(0, apex.length - (tld ? tld.length + 1 : 0));
+    var tokens = apexLabelRaw.split(/[^a-z0-9]+/).filter(Boolean);
+    var subLabels = labels.slice(0, Math.max(0, labels.length - apex.split(".").length));
+
+    for (var b = 0; b < WATCHED_BRANDS.length; b++) {
+      var brand = WATCHED_BRANDS[b];
+      if (tld === brand) break;              // .google, .apple — genuinely theirs
+      if (apexLabelRaw === brand) break;     // paypal.com, paypal.co.uk
+
+      if (subLabels.indexOf(brand) !== -1) {
+        add("brand-subdomain-spoof", 30, '"' + brand + '" appears as a subdomain label but the registrable domain is ' + apex + " — the shape of " + brand + ".com." + apex);
+        break;
+      }
+      if (tokens.indexOf(brand) !== -1) {
+        add("brand-in-apex", 22, "The registrable domain " + apex + ' contains the brand "' + brand + '" — verify this domain is genuinely theirs');
+        break;
+      }
+      var near = null;
+      for (var t = 0; t < tokens.length; t++) {
+        var tok = tokens[t];
+        if (tok.length >= 5 && Math.abs(tok.length - brand.length) <= 2 && tok !== brand && editDistance(tok, brand, 2) <= 2) { near = tok; break; }
+      }
+      if (near) {
+        add("brand-lookalike", 26, '"' + near + '" in ' + apex + ' is a near-miss for "' + brand + '" — classic typosquat shape');
+        break;
+      }
+      if (h.indexOf(brand) !== -1) {
+        add("brand-in-name", 14, 'The hostname mentions "' + brand + '" but resolves under ' + apex);
+        break;
+      }
+    }
+
+    var lures = LURE_WORDS.filter(function (w) { return h.indexOf(w) !== -1; });
+    if (lures.length >= 2) {
+      add("lure-words", 12, "Login-funnel wording in the hostname: " + lures.slice(0, 4).join(", "));
+    }
+  }
+
+  var weight = 0;
+  signals.forEach(function (s) { weight += s.weight; });
+  return { host: h, apex: apex, signals: signals, weight: weight };
+}
+
+var SINKHOLE = { "0.0.0.0": true, "127.0.0.1": true, "::": true, "::1": true };
+
+function analyseIP(ip, asAnswer) {
+  var cls = classifyIP(ip);
+  var signals = [];
+  function add(id, weight, detail) { signals.push({ id: id, weight: weight, detail: detail }); }
+
+  if (!cls) {
+    return { ip: String(ip), signals: [{ id: "unparseable", weight: 30, detail: "Not a valid IPv4 or IPv6 address" }], weight: 30 };
+  }
+  if (cls.special) {
+    if (SINKHOLE[cls.ip]) {
+      add("sinkhole-answer", 0, cls.ip + ' is the standard "blocked" answer — a filter returned it instead of a real address. Informational, not a threat');
+    } else if (!cls.routable && asAnswer) {
+      add("private-answer", 30, "A public name was answered with " + cls.ip + " (" + cls.special + "). That is DNS rebinding, a split-horizon override, or a misconfigured local record — worth explaining before trusting it");
+    } else {
+      add("special-use", 0, cls.special + " address (" + cls.cidr + ") — not routable on the public internet");
+    }
+  }
+  var weight = 0;
+  signals.forEach(function (s) { weight += s.weight; });
+  return { ip: cls.ip, signals: signals, weight: weight };
+}
+
+var SEV_ORDER = ["critical", "warning", "notice", "unknown"];
+var SEV_LABEL = { critical: "Flagged", warning: "Check this", notice: "Worth a look", unknown: "No evidence" };
+var SEV_GLYPH = { critical: "!!", warning: "! ", notice: "· ", unknown: "? " };
+var SEV_BLURB = {
+  critical: "The structural signals are overwhelming. Treat these as hostile until shown otherwise.",
+  warning: "Several signals line up. Confirm this is something you expect before trusting it.",
+  notice: "One mild signal. Usually benign, listed so the judgement is yours.",
+  unknown: "Nothing in the name itself stood out. With no network access that means neither safe nor unsafe."
+};
+
+function severityFor(weight) {
+  if (weight >= 60) return "critical";
+  if (weight >= 26) return "warning";
+  if (weight >= 10) return "notice";
+  return "unknown";
+}
+
+/* ============================== analysis run ============================== */
+
+function isInternalName(host) { return !!INTERNAL_TLDS[String(tldOf(host) || "")]; }
+
+function runAnalysis(text, allowList) {
+  var ex = extract(text);
+  if (!ex.hosts.length && !ex.ips.length) return { error: "No hostnames or addresses found. If the values sit in an unusual column, try pasting just that column.", columns: ex.columns };
+
+  var allowApexes = {};
+  allowList.forEach(function (a) {
+    var apex = apexOf(a) || normaliseHost(a);
+    if (apex) allowApexes[apex] = true;
+  });
+
+  // A public name answered privately is the rebinding case. printer.lan
+  // answering 192.168.1.9 is DNS working correctly, so it must not arm it.
+  var answerIPs = {};
+  ex.pairs.forEach(function (p) { if (!isInternalName(p.host)) answerIPs[p.ip] = true; });
+
+  var rows = [];
+  ex.hosts.forEach(function (h) {
+    var a = analyseHost(h.host, allowApexes);
+    rows.push({
+      kind: "hostname", value: a.host, count: h.count,
+      signals: a.signals, weight: a.weight,
+      severity: allowApexes[a.apex] ? "unknown" : severityFor(a.weight)
+    });
+  });
+
+  // Only computed for names a reader will actually open — on a 40,000-row
+  // export, doing this for every name would cost far more than it returns.
+  rows.forEach(function (r) {
+    if (r.kind !== "hostname") return;
+    if (r.severity !== "critical" && r.severity !== "warning" && r.severity !== "notice") return;
+    r.near = coOccurring(r.value, ex, 12);
+  });
+  ex.ips.forEach(function (i) {
+    var a = analyseIP(i.ip, !!answerIPs[i.ip]);
+    rows.push({
+      kind: "address", value: a.ip, count: i.count,
+      signals: a.signals, weight: a.weight, severity: severityFor(a.weight)
+    });
+  });
+
+  rows.sort(function (a, b) {
+    var d = SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity);
+    return d !== 0 ? d : (b.weight - a.weight) || (b.count - a.count) ||
+      String(a.value).localeCompare(String(b.value));
+  });
+
+  var tally = { critical: 0, warning: 0, notice: 0, unknown: 0 };
+  rows.forEach(function (r) { tally[r.severity]++; });
+
+  return { rows: rows, tally: tally, columns: ex.columns, rowCount: ex.rowCount, uniqueHosts: ex.hosts.length, uniqueIPs: ex.ips.length };
+}
+
+/* ============================== sample data ============================== */
+
+// Invented names only. Client addresses are RFC1918 and hostile-looking names
+// answer 0.0.0.0, so no real network or real host is misrepresented here.
+var SAMPLE = [
+  "timestamp,question,answers,sourceIp,device",
+  "2026-08-22T09:14:02Z,ocsp.apple.com,17.253.5.203,192.168.1.44,iPhone",
+  "2026-08-22T09:14:09Z,gateway.icloud.com,17.248.153.10,192.168.1.44,iPhone",
+  "2026-08-22T09:15:31Z,paypal.com.secure-login.xyz,0.0.0.0,192.168.1.44,iPhone",
+  "2026-08-22T09:15:33Z,account-verify-signin.paypa1.top,0.0.0.0,192.168.1.44,iPhone",
+  "2026-08-22T09:16:00Z,dns.google,8.8.8.8,192.168.1.51,Laptop",
+  "2026-08-22T09:16:04Z,mask.icloud.com,146.75.29.6,192.168.1.44,iPhone",
+  "2026-08-22T09:17:12Z,zxqvbnmklphgtrew.cfd,0.0.0.0,192.168.1.51,Laptop",
+  "2026-08-22T09:17:44Z,lh3.googleusercontent.com,142.250.72.129,192.168.1.51,Laptop",
+  "2026-08-22T09:18:02Z,graph.facebook.com,157.240.22.15,192.168.1.44,iPhone",
+  "2026-08-22T09:18:30Z,cdn.jsdelivr.net,151.101.1.229,192.168.1.51,Laptop",
+  "2026-08-22T09:19:01Z,secure-update-billing.myaccount-review.click,0.0.0.0,192.168.1.62,TV",
+  "2026-08-22T09:19:40Z,telemetry-a7f3c2b91e4d8.duckdns.org,0.0.0.0,192.168.1.62,TV",
+  "2026-08-22T09:20:11Z,printer.lan,192.168.1.9,192.168.1.51,Laptop",
+  "2026-08-22T09:20:52Z,bank-of-america-alerts.verify-account.sbs,0.0.0.0,192.168.1.44,iPhone",
+  "2026-08-22T09:21:03Z,api.mycompany.com,203.0.113.44,192.168.1.51,Laptop",
+  "2026-08-22T09:21:30Z,xn--pypal-4ve.com,0.0.0.0,192.168.1.44,iPhone",
+  "2026-08-22T09:22:00Z,settings.crashlytics.com,142.250.72.106,192.168.1.44,iPhone",
+  "2026-08-22T09:22:41Z,one.one.one.one,1.1.1.1,192.168.1.62,TV",
+  "2026-08-22T09:23:10Z,push.services.mozilla.com,34.107.221.82,192.168.1.51,Laptop",
+  "2026-08-22T09:23:55Z,a1b2c3d4e5f60718.ngrok-free.app,0.0.0.0,192.168.1.62,TV",
+  "2026-08-22T09:24:20Z,www.googleapis.com,142.250.72.106,192.168.1.51,Laptop",
+  "2026-08-22T09:24:58Z,microsoft-account-unlock.support-secure.cyou,0.0.0.0,192.168.1.51,Laptop",
+  "2026-08-22T09:25:30Z,cdn.ampproject.org,142.250.72.97,192.168.1.44,iPhone",
+  "2026-08-22T09:26:02Z,e6633.dsce9.akamaiedge.net,23.62.5.104,192.168.1.51,Laptop",
+  "2026-08-22T09:26:44Z,internal-tools.corp,10.20.30.40,192.168.1.51,Laptop"
+].join("\n");
+
+/* ============================== interface ============================== */
+
+var $ = function (id) { return document.getElementById(id); };
+var state = { result: null, filter: null, open: {}, source: "" };
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+var toastTimer = null;
+function toast(msg) {
+  var t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2600);
+}
+
+function showError(msg) {
+  var e = $("err");
+  if (!msg) { e.classList.add("hidden"); e.textContent = ""; return; }
+  e.textContent = msg;
+  e.classList.remove("hidden");
+}
+
+function renderTally() {
+  var t = state.result.tally;
+  $("tally").innerHTML = SEV_ORDER.map(function (sev) {
+    var pressed = state.filter === sev;
+    return '<button class="readout" type="button" data-sev="' + sev + '" aria-pressed="' + pressed + '">' +
+      '<span class="readout-n">' + t[sev] + '</span>' +
+      '<span class="readout-l">' + SEV_LABEL[sev] + '</span>' +
+      '</button>';
+  }).join("");
+}
+
+function renderLedger() {
+  var r = state.result;
+  var visible = r.rows.filter(function (row) {
+    if (state.filter) return row.severity === state.filter;
+    return row.severity !== "unknown";
+  });
+
+  var html = "";
+
+  if (!visible.length && !state.filter) {
+    html += '<div class="bucket"><p>Nothing in this export produced a structural signal. That is a normal result for a quiet network — and it is not a clean bill of health.</p></div>';
+  }
+
+  visible.forEach(function (row, i) {
+    var key = row.kind + ":" + row.value;
+    var isOpen = !!state.open[key];
+    var reasons = row.signals.filter(function (s) { return s.weight > 0; });
+    var notes = row.signals.filter(function (s) { return s.weight === 0; });
+    html += '<div class="row" data-sev="' + row.severity + '">' +
+      '<button class="row-main" type="button" data-key="' + esc(key) + '" aria-expanded="' + isOpen + '">' +
+        '<span class="glyph" aria-hidden="true">' + SEV_GLYPH[row.severity] + '</span>' +
+        '<span class="name">' + esc(row.value) + '</span>' +
+        '<span class="meta">' +
+          (row.count > 1 ? '<span>' + row.count + '&times;</span>' : '') +
+          '<span class="score">' + row.weight + '</span>' +
+        '</span>' +
+      '</button>';
+    if (isOpen) {
+      html += '<div class="row-detail"><ul class="reasons">';
+      if (!reasons.length && !notes.length) {
+        html += '<li>No structural signal. This page cannot check reputation, so that means nothing was noticed — not that it is safe.</li>';
+      }
+      reasons.forEach(function (s) { html += '<li>' + esc(s.detail) + '</li>'; });
+      notes.forEach(function (s) { html += '<li class="note">' + esc(s.detail) + '</li>'; });
+      html += '</ul>';
+      if (row.near) {
+        html += '<div class="window"><p class="window-h">Seen alongside' +
+          (row.near.timed ? ' (within two minutes)' : ' (nearby rows — this export has no usable timestamp)') +
+          '</p><p class="window-l">' +
+          row.near.names.map(function (n) { return '<span>' + esc(n) + '</span>'; }).join("") +
+          (row.near.total > row.near.names.length
+            ? '<span class="more">+' + (row.near.total - row.near.names.length) + ' more</span>' : '') +
+          '</p></div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+
+  // The quiet bucket is counted, never enumerated, unless it is the filter.
+  if (!state.filter && r.tally.unknown > 0) {
+    html += '<div class="bucket">' +
+      '<span class="bucket-n">' + r.tally.unknown + '</span>' +
+      '<p><strong style="color:var(--ink);font-weight:600">' + SEV_LABEL.unknown + '.</strong> ' + SEV_BLURB.unknown + ' Tap the readout above to list them.</p>' +
+      '</div>';
+  }
+
+  $("ledger").innerHTML = html;
+}
+
+function renderRunstat() {
+  var r = state.result;
+  var cols = r.columns;
+  var bits = [];
+  bits.push(r.rowCount.toLocaleString() + " rows");
+  bits.push(r.uniqueHosts + " names");
+  bits.push(r.uniqueIPs + " addresses");
+  $("runstat").textContent = bits.join("  ·  ");
+
+  var hostNames = (cols.hostCols || []).map(function (c) { return c.header; });
+  var ipNames = (cols.ipCols || []).map(function (c) { return c.header + (c.role === "source" ? " (source)" : ""); });
+  var detail = document.querySelector(".cols");
+  var text = "Read hostnames from " + (hostNames.length ? hostNames.join(", ") : "no column") +
+             "; addresses from " + (ipNames.length ? ipNames.join(", ") : "no column") + ".";
+  if (!detail) {
+    detail = document.createElement("p");
+    detail.className = "cols";
+    $("tally").parentNode.insertBefore(detail, $("tally"));
+    detail.style.marginBottom = "-6px";
+    detail.style.marginTop = "18px";
+  }
+  detail.textContent = text;
+}
+
+function render() {
+  if (!state.result) {
+    $("results").classList.add("hidden");
+    $("empty").classList.remove("hidden");
+    $("runstat").textContent = "";
+    var c = document.querySelector(".cols");
+    if (c) c.remove();
+    return;
+  }
+  $("empty").classList.add("hidden");
+  $("results").classList.remove("hidden");
+  renderRunstat();
+  renderTally();
+  renderLedger();
+}
+
+function allowLines() {
+  return $("allow").value.split(/[\s,]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
+function analyse() {
+  showError("");
+  var text = $("csv").value.trim();
+  if (!text) { showError("Nothing to analyse yet — drop in a file or paste an export above."); return; }
+  var out = runAnalysis(text, allowLines());
+  if (out.error) {
+    state.result = null;
+    render();
+    showError(out.error);
+    return;
+  }
+  state.result = out;
+  state.filter = null;
+  state.open = {};
+  render();
+  var found = out.tally.critical + out.tally.warning;
+  toast(found ? found + " name" + (found === 1 ? "" : "s") + " worth your attention." : "Analysis complete. Nothing stood out.");
+}
+
+function reset(loadSample) {
+  state.result = null;
+  state.filter = null;
+  state.open = {};
+  $("csv").value = loadSample ? SAMPLE : "";
+  $("allow").value = "";
+  // Resetting the input matters: without it, picking the SAME file again
+  // fires no change event and the app looks broken.
+  $("file").value = "";
+  showError("");
+  render();
+  if (loadSample) analyse();
+  else toast("Cleared. Drop in a new export.");
+}
+
+/* ------------------------------ briefing ------------------------------ */
+
+function buildBriefing() {
+  var r = state.result;
+  var L = [];
+  L.push("RESOLVER TRIAGE — structural analysis only, no network lookups");
+  L.push(r.rowCount.toLocaleString() + " rows, " + r.uniqueHosts + " unique names, " + r.uniqueIPs + " unique addresses");
+  var hostNames = (r.columns.hostCols || []).map(function (c) { return c.header; }).join(", ");
+  var ipNames = (r.columns.ipCols || []).map(function (c) { return c.header + (c.role === "source" ? " (source)" : ""); }).join(", ");
+  L.push("Columns read — names: " + (hostNames || "none") + "; addresses: " + (ipNames || "none"));
+  L.push("");
+
+  var budget = 3600;
+  function push(s) { if (L.join("\n").length + s.length < budget) { L.push(s); return true; } return false; }
+
+  ["critical", "warning"].forEach(function (sev) {
+    var rows = r.rows.filter(function (x) { return x.severity === sev; });
+    if (!rows.length) return;
+    push(SEV_LABEL[sev].toUpperCase() + " (" + rows.length + ")");
+    var shown = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var reasons = row.signals.filter(function (s) { return s.weight > 0; }).map(function (s) { return s.detail; });
+      if (!push("  " + row.value + "  [score " + row.weight + (row.count > 1 ? ", seen " + row.count + "x" : "") + "]")) break;
+      var ok = true;
+      for (var j = 0; j < reasons.length; j++) { if (!push("    - " + reasons[j])) { ok = false; break; } }
+      if (!ok) break;
+      // The window is the context that decides what the name means; it is
+      // worth more of the budget than another restatement of the score.
+      if (row.near) {
+        push("    seen alongside: " + row.near.names.slice(0, 8).join(", ") +
+          (row.near.total > 8 ? " (+" + (row.near.total - 8) + " more)" : ""));
+      }
+      shown++;
+    }
+    if (shown < rows.length) L.push("  ...and " + (rows.length - shown) + " more not listed here");
+    L.push("");
+  });
+
+  var notice = r.rows.filter(function (x) { return x.severity === "notice"; });
+  if (notice.length) {
+    L.push(SEV_LABEL.notice.toUpperCase() + " (" + notice.length + ")");
+    var names = notice.map(function (x) { return x.value; });
+    var line = "  " + names.join(", ");
+    if (line.length > 700) line = "  " + names.slice(0, 25).join(", ") + ", ...and " + (names.length - 25) + " more";
+    L.push(line);
+    L.push("");
+  }
+  L.push("No structural signal: " + r.tally.unknown + " names/addresses (means nothing was noticed, not that they are safe)");
+  L.push("");
+  L.push("Answer as Facts -> Interpretation -> Recommended action, in that order.");
+  L.push("For each name: what it is, which app or SDK contacts it, what urlscan.io");
+  L.push("and current reporting say, then block / allow / investigate.");
+  L.push("Read the 'seen alongside' list before judging any name — a tight burst of");
+  L.push("first-party API hosts plus a small SDK set is one app starting up; dozens of");
+  L.push("unrelated ad hosts in seconds is a mediation waterfall. That co-occurrence");
+  L.push("outranks a urlscan search's category mix, which is skewed by what");
+  L.push("researchers choose to scan and is not a sample of who uses a vendor.");
+  L.push("Say so when a name has simply never been scanned: that is the normal state");
+  L.push("for first-party telemetry and means neither safe nor unsafe.");
+  return L.join("\n");
+}
+
+function copyBriefing() {
+  var text = buildBriefing();
+  function fallback() {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    toast(ok ? "Briefing copied — paste it into Claude." : "Could not copy automatically. Select the text and copy it by hand.");
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function () {
+      toast("Briefing copied — paste it into Claude.");
+    })["catch"](fallback);
+  } else fallback();
+}
+
+function exportShortlist() {
+  var r = state.result;
+  var rows = r.rows.filter(function (x) { return x.severity === "critical" || x.severity === "warning"; });
+  if (!rows.length) { toast("Nothing flagged, so there is no shortlist to save."); return; }
+
+  var out = [];
+  out.push("# Resolver triage shortlist");
+  out.push("# " + rows.length + " entries from " + r.rowCount + " rows");
+  out.push("#");
+  out.push("# These verdicts are structural analysis only — no reputation data was");
+  out.push("# consulted. Review each one before blocking it: a false positive here");
+  out.push("# is a name your network can no longer reach.");
+  out.push("");
+  rows.forEach(function (row) {
+    out.push(row.value);
+  });
+  out.push("");
+
+  claude.use("downloads").then(function (downloads) {
+    if (!downloads) { toast("Saving files is not available in this view."); return; }
+    // The save allowlist rejects .conf, so the shortlist goes out as .txt.
+    return downloads.save({ filename: "triage-shortlist.txt", data: out.join("\n") })
+      .then(function () { toast("Shortlist saved."); })
+      ["catch"](function (err) {
+        var code = err && err.code;
+        if (code === "declined") return;
+        if (code === "too_large") toast("That shortlist is too large to save.");
+        else if (code === "rate_limited") toast("A save is already in progress — try again in a moment.");
+        else toast("Could not save the shortlist here.");
+      });
+  })["catch"](function () { toast("Saving files is not available in this view."); });
+}
+
+/* ------------------------------ wiring ------------------------------ */
+
+/* --------------------------- spreadsheet reading ---------------------------
+
+   Control D and several other exporters offer XLSX as readily as CSV, and a
+   picker that only accepts .csv leaves you unable to select the file you
+   actually have. An .xlsx is a ZIP of XML, and the platform can inflate it —
+   DecompressionStream handles the deflate — so reading one needs no library.
+--------------------------------------------------------------------------- */
+
+function decodeXml(s) {
+  return String(s)
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, function (_, d) { return String.fromCharCode(Number(d)); })
+    .replace(/&#x([0-9a-f]+);/gi, function (_, h) { return String.fromCharCode(parseInt(h, 16)); })
+    .replace(/&amp;/g, "&");   // last, or an escaped entity decodes twice
+}
+
+function openZip(buf) {
+  var dv = new DataView(buf);
+  var u8 = new Uint8Array(buf);
+  var eocd = -1;
+  var floor = Math.max(0, u8.length - 65557);
+  for (var i = u8.length - 22; i >= floor; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) return null;
+  var count = dv.getUint16(eocd + 10, true);
+  var p = dv.getUint32(eocd + 16, true);
+  var files = {};
+  for (var n = 0; n < count; n++) {
+    if (p + 46 > u8.length || dv.getUint32(p, true) !== 0x02014b50) break;
+    var nameLen = dv.getUint16(p + 28, true);
+    files[new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nameLen))] = {
+      method: dv.getUint16(p + 10, true),
+      compSize: dv.getUint32(p + 20, true),
+      lho: dv.getUint32(p + 42, true)
+    };
+    p += 46 + nameLen + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+  }
+  return { files: files, dv: dv, u8: u8 };
+}
+
+function zipText(zip, name) {
+  var f = zip.files[name];
+  if (!f) return Promise.resolve(null);
+  var dv = zip.dv, u8 = zip.u8;
+  if (dv.getUint32(f.lho, true) !== 0x04034b50) return Promise.resolve(null);
+  var start = f.lho + 30 + dv.getUint16(f.lho + 26, true) + dv.getUint16(f.lho + 28, true);
+  var data = u8.subarray(start, start + f.compSize);
+  if (f.method === 0) return Promise.resolve(new TextDecoder().decode(data));
+  if (f.method !== 8) return Promise.reject(new Error("unsupported-compression"));
+  if (typeof DecompressionStream === "undefined") return Promise.reject(new Error("no-decompression"));
+  var stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Response(stream).arrayBuffer().then(function (out) {
+    return new TextDecoder().decode(out);
+  });
+}
+
+function sharedStrings(xml) {
+  if (!xml) return [];
+  var out = [], m;
+  var siRe = /<si[^>]*>([\s\S]*?)<\/si>/g;
+  while ((m = siRe.exec(xml))) {
+    // Rich text splits one string across several <t> runs; join them all.
+    var parts = m[1].match(/<t[^>]*>([\s\S]*?)<\/t>/g) || [];
+    out.push(decodeXml(parts.map(function (t) {
+      return t.replace(/^<t[^>]*>/, "").replace(/<\/t>$/, "");
+    }).join("")));
+  }
+  return out;
+}
+
+function colIndex(ref) {
+  var m = String(ref).match(/^([A-Z]+)/);
+  if (!m) return -1;
+  var n = 0;
+  for (var i = 0; i < m[1].length; i++) n = n * 26 + (m[1].charCodeAt(i) - 64);
+  return n - 1;
+}
+
+function sheetRows(xml, shared) {
+  var rows = [], m;
+  var rowRe = /<row[^>]*>([\s\S]*?)<\/row>/g;
+  while ((m = rowRe.exec(xml))) {
+    var cells = [], c;
+    var cRe = /<c([^>]*?)\/>|<c([^>]*?)>([\s\S]*?)<\/c>/g;
+    while ((c = cRe.exec(m[1]))) {
+      var attrs = c[1] !== undefined ? c[1] : (c[2] || "");
+      var body = c[3] || "";
+      var refM = attrs.match(/r="([A-Z]+)\d+"/);
+      var idx = refM ? colIndex(refM[1]) : cells.length;
+      if (idx < 0) idx = cells.length;
+      var t = (attrs.match(/t="([^"]+)"/) || [])[1];
+      var val = "";
+      if (t === "inlineStr") {
+        var parts = body.match(/<t[^>]*>([\s\S]*?)<\/t>/g) || [];
+        val = decodeXml(parts.map(function (x) {
+          return x.replace(/^<t[^>]*>/, "").replace(/<\/t>$/, "");
+        }).join(""));
+      } else {
+        var vM = body.match(/<v[^>]*>([\s\S]*?)<\/v>/);
+        var raw = vM ? vM[1] : "";
+        val = t === "s" ? (shared[Number(raw)] || "") : decodeXml(raw);
+      }
+      while (cells.length < idx) cells.push("");
+      cells[idx] = val;
+    }
+    rows.push(cells);
+  }
+  return rows;
+}
+
+function rowsToCSV(rows) {
+  return rows.map(function (r) {
+    return r.map(function (v) {
+      var s = v == null ? "" : String(v);
+      return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(",");
+  }).join("\n");
+}
+
+function xlsxToCSV(buf) {
+  var zip = openZip(buf);
+  if (!zip) return Promise.reject(new Error("not-a-workbook"));
+  var sheetName = null;
+  // sheet1.xml is the convention, but fall back to whichever sheet is first.
+  if (zip.files["xl/worksheets/sheet1.xml"]) sheetName = "xl/worksheets/sheet1.xml";
+  else {
+    Object.keys(zip.files).forEach(function (k) {
+      if (!sheetName && /^xl\/worksheets\/[^/]+\.xml$/.test(k)) sheetName = k;
+    });
+  }
+  if (!sheetName) return Promise.reject(new Error("no-sheet"));
+  return zipText(zip, "xl/sharedStrings.xml").then(function (ss) {
+    var shared = sharedStrings(ss);
+    return zipText(zip, sheetName).then(function (sheet) {
+      if (!sheet) throw new Error("no-sheet");
+      return rowsToCSV(sheetRows(sheet, shared));
+    });
+  });
+}
+
+/* ------------------------------ file intake ------------------------------ */
+
+function looksBinary(u8) {
+  var n = Math.min(u8.length, 1024), nulls = 0;
+  for (var i = 0; i < n; i++) if (u8[i] === 0) nulls++;
+  return nulls > 0;
+}
+
+function acceptText(text, label) {
+  if (!text || !text.trim()) {
+    showError("That file came through empty. Check the export actually contains rows.");
+    return;
+  }
+  $("csv").value = text;
+  state.source = label || "";
+  analyse();
+}
+
+function readFile(file) {
+  if (!file) return;
+  showError("");
+  if (file.size === 0) { showError("That file is empty."); return; }
+
+  var reader = new FileReader();
+  reader.onerror = function () {
+    showError("That file could not be read. Try opening it and pasting the contents instead.");
+  };
+  reader.onload = function () {
+    var buf = reader.result;
+    var u8 = new Uint8Array(buf);
+
+    // "PK\x03\x04" — a ZIP, which for our purposes means an .xlsx workbook.
+    var isZip = u8.length > 4 && u8[0] === 0x50 && u8[1] === 0x4b && u8[2] === 0x03 && u8[3] === 0x04;
+    if (isZip) {
+      xlsxToCSV(buf).then(function (csv) {
+        acceptText(csv, file.name);
+      })["catch"](function (err) {
+        var m = err && err.message;
+        if (m === "no-decompression") {
+          showError("This browser cannot unpack .xlsx files. Open the workbook and save it as CSV, then try again.");
+        } else {
+          showError("That looks like a spreadsheet but the first sheet could not be read. Open it and save as CSV, then try again.");
+        }
+      });
+      return;
+    }
+
+    // An old .xls, or something else binary — decoding it produces noise.
+    if (u8.length > 8 && u8[0] === 0xd0 && u8[1] === 0xcf) {
+      showError("That is an older .xls workbook. Open it and save as .xlsx or .csv, then try again.");
+      return;
+    }
+    if (looksBinary(u8)) {
+      showError("That file does not look like text. Export it as CSV, or paste the contents into the box below.");
+      return;
+    }
+
+    acceptText(new TextDecoder("utf-8").decode(buf), file.name);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// No click bridge: the label activates the input natively, which works in
+// sandboxed frames where a scripted click on a hidden input does not.
+$("file").addEventListener("change", function (e) { readFile(e.target.files && e.target.files[0]); });
+$("btn-run").addEventListener("click", analyse);
+
+// Pasting is the path that always works, so make it a single action rather
+// than paste-then-remember-to-press-a-button.
+$("csv").addEventListener("paste", function () {
+  setTimeout(function () { if ($("csv").value.trim()) analyse(); }, 60);
+});
+
+// Some viewers permit clipboard reads and some do not; offer it, and say
+// plainly what to do when it is refused rather than failing silently.
+$("btn-paste").addEventListener("click", function () {
+  if (!navigator.clipboard || !navigator.clipboard.readText) {
+    toast("This browser will not let the page read the clipboard — paste into the box with Ctrl+V.");
+    return;
+  }
+  navigator.clipboard.readText().then(function (text) {
+    if (!text || !text.trim()) { toast("The clipboard is empty."); return; }
+    $("csv").value = text;
+    analyse();
+  })["catch"](function () {
+    toast("Clipboard access was refused — click the box and paste with Ctrl+V instead.");
+  });
+});
+$("btn-clear").addEventListener("click", function () { reset(false); });
+$("btn-example").addEventListener("click", function () { reset(true); });
+$("btn-brief").addEventListener("click", copyBriefing);
+$("btn-export").addEventListener("click", exportShortlist);
+
+// The whole document is the drop target, not just the box: where a file
+// picker is blocked, dropping is often the only route in, and a small target
+// makes that route feel broken too.
+var drop = $("drop");
+var dragDepth = 0;
+
+document.addEventListener("dragenter", function (e) {
+  e.preventDefault();
+  dragDepth++;
+  drop.classList.add("over");
+});
+document.addEventListener("dragover", function (e) { e.preventDefault(); });
+document.addEventListener("dragleave", function (e) {
+  e.preventDefault();
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) drop.classList.remove("over");
+});
+document.addEventListener("drop", function (e) {
+  e.preventDefault();
+  dragDepth = 0;
+  drop.classList.remove("over");
+  var dt = e.dataTransfer;
+  if (!dt) return;
+  var f = dt.files && dt.files[0];
+  if (f) { readFile(f); return; }
+  // Some sources hand over text rather than a file handle.
+  var text = dt.getData && dt.getData("text/plain");
+  if (text && text.trim()) { $("csv").value = text; analyse(); }
+});
+
+$("tally").addEventListener("click", function (e) {
+  var btn = e.target.closest(".readout");
+  if (!btn) return;
+  var sev = btn.getAttribute("data-sev");
+  state.filter = state.filter === sev ? null : sev;
+  renderTally();
+  renderLedger();
+});
+
+$("ledger").addEventListener("click", function (e) {
+  var btn = e.target.closest(".row-main");
+  if (!btn) return;
+  var key = btn.getAttribute("data-key");
+  state.open[key] = !state.open[key];
+  renderLedger();
+});
+
+// Re-scoring on allowlist change is what makes the field feel like a control
+// rather than a form field you have to remember to re-submit.
+var allowTimer = null;
+$("allow").addEventListener("input", function () {
+  if (!state.result) return;
+  clearTimeout(allowTimer);
+  allowTimer = setTimeout(analyse, 400);
+});
+
+render();
+})();
+</script>
